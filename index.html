@@ -11,63 +11,69 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>RDG Site Visit</title>
 <style>
-  :root{
-    --red:#a12b2a;
-    --ink:#101010;
-    --paper:#f6f5f3;
-    --line:rgba(255,255,255,.28);
-  }
+  :root{ --red:#a12b2a; --ink:#101010; --paper:#f6f5f3; --line:rgba(255,255,255,.28); }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:#000;
     font:400 16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
-    color:#fff;-webkit-user-select:none;user-select:none}
+    color:#fff;-webkit-user-select:none;user-select:none;touch-action:none}
 
-  /* ---------- capture ---------- */
-  #cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  #camwrap{position:fixed;inset:0;overflow:hidden;background:#000}
+  #cam{width:100%;height:100%;object-fit:cover;transform-origin:center center;
+    transition:transform .12s ease-out;display:block}
   #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .09s}
   #flash.on{opacity:.75;transition:none}
 
   .topbar{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;
-    display:flex;align-items:center;gap:10px;
+    display:flex;align-items:center;gap:10px;z-index:5;
     background:linear-gradient(180deg,rgba(0,0,0,.62),rgba(0,0,0,0))}
-  .chip{border:1px solid var(--line);background:rgba(0,0,0,.35);color:#fff;
-    padding:7px 13px;border-radius:100px;font-size:13.5px;letter-spacing:.2px;backdrop-filter:blur(8px)}
+  .chip{border:1px solid var(--line);background:rgba(0,0,0,.38);color:#fff;
+    padding:7px 13px;border-radius:100px;font-size:13.5px;backdrop-filter:blur(8px)}
   .chip:active{background:rgba(255,255,255,.2)}
   .count{margin-left:auto;font-variant-numeric:tabular-nums;font-size:13.5px;opacity:.9}
   .count b{font-size:19px;font-weight:600}
 
-  .dock{position:fixed;left:0;right:0;bottom:0;height:150px;
+  .zoomrow{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 158px);
+    display:flex;justify-content:center;gap:9px;z-index:5}
+  .zchip{width:44px;height:36px;border-radius:100px;border:1px solid var(--line);
+    background:rgba(0,0,0,.42);color:#fff;font-size:13px;font-weight:600;backdrop-filter:blur(8px)}
+  .zchip.on{background:#fff;color:var(--red);border-color:#fff}
+
+  .dock{position:fixed;left:0;right:0;bottom:0;height:150px;z-index:5;
     padding:0 22px calc(env(safe-area-inset-bottom) + 14px);
     display:flex;align-items:center;justify-content:space-between;
     background:linear-gradient(0deg,rgba(0,0,0,.66),rgba(0,0,0,0))}
-
   #thumb{width:54px;height:54px;border-radius:11px;border:1.5px solid var(--line);
     background:#222 center/cover no-repeat;position:relative;flex:0 0 auto}
   #thumb.empty{opacity:.32}
   #thumb .badge{position:absolute;right:-6px;top:-6px;min-width:22px;height:22px;border-radius:11px;
     background:var(--red);color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;padding:0 5px}
-
   #shutter{width:82px;height:82px;border-radius:50%;background:#fff;border:5px solid var(--red);
     box-shadow:0 0 0 3px rgba(0,0,0,.35);flex:0 0 auto}
   #shutter:active{transform:scale(.93)}
   #shutter.busy{background:#ddd}
+  #undo{width:54px;height:54px;flex:0 0 auto;border:1px solid var(--line);background:rgba(0,0,0,.35);
+    color:#fff;border-radius:11px;font-size:12px;backdrop-filter:blur(8px);opacity:0;
+    transition:opacity .18s;pointer-events:none}
+  #undo.show{opacity:1;pointer-events:auto}
 
-  .spacer{width:54px;flex:0 0 auto}
+  .stall{position:fixed;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 205px);
+    background:var(--red);color:#fff;border:0;border-radius:12px;padding:14px;font:inherit;
+    font-weight:600;display:none;z-index:6}
+  .stall.show{display:block}
 
-  /* ---------- sheets ---------- */
   .sheet{position:fixed;inset:0;background:var(--paper);color:var(--ink);
     transform:translateY(100%);transition:transform .22s ease;overflow-y:auto;
-    -webkit-overflow-scrolling:touch;z-index:20}
+    -webkit-overflow-scrolling:touch;z-index:20;touch-action:auto}
   .sheet.open{transform:translateY(0)}
   .sheethead{position:sticky;top:0;background:var(--paper);z-index:2;
     padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;
     display:flex;align-items:center;gap:12px;border-bottom:1px solid #dedbd6}
-  .sheethead h2{margin:0;font-size:17px;font-weight:650;letter-spacing:.2px}
+  .sheethead h2{margin:0;font-size:17px;font-weight:650}
   .btn{border:0;background:none;color:var(--red);font-size:16px;font-weight:600;padding:6px 2px}
   .btn.right{margin-left:auto}
 
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px}
-  .cell{position:relative;aspect-ratio:1;background:#ddd center/cover no-repeat}
+  .cell{position:relative;aspect-ratio:1;background:#ddd center/cover no-repeat;border:0;padding:0}
   .cell .t{position:absolute;left:0;right:0;bottom:0;padding:4px 5px;font-size:10.5px;color:#fff;
     background:linear-gradient(0deg,rgba(0,0,0,.7),transparent);font-variant-numeric:tabular-nums}
   .cell .n{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.6);color:#fff;
@@ -84,22 +90,27 @@
   .chips{display:flex;flex-wrap:wrap;gap:8px}
   .tag{border:1px solid #d5d1cb;background:#fff;color:#3c3733;padding:9px 14px;border-radius:100px;font-size:14.5px}
   .tag.on{background:var(--red);border-color:var(--red);color:#fff}
-  .danger{color:#a12b2a;border:1px solid #e3d4d3;background:#fff;width:100%;
+  .danger{color:var(--red);border:1px solid #e3d4d3;background:#fff;width:100%;
     padding:14px;border-radius:10px;font:inherit;font-weight:600;margin:26px 0 40px}
-
   input[type=text]{width:100%;border:1px solid #d5d1cb;border-radius:10px;padding:13px;
     font:inherit;background:#fff;color:var(--ink)}
-
-  .msg{position:fixed;inset:0;display:none;place-items:center;padding:30px;text-align:center;
-    background:#000;z-index:40;font-size:15px;line-height:1.5}
-  .msg.show{display:grid}
-  .msg .btn{color:#fff;border:1px solid var(--line);border-radius:100px;padding:12px 22px;margin-top:18px}
   .empty{padding:60px 30px;text-align:center;color:#8a837c;font-size:15px}
+
+  .areasheet{position:fixed;left:0;right:0;bottom:0;background:var(--paper);color:var(--ink);
+    border-radius:16px 16px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);
+    transform:translateY(110%);transition:transform .2s ease;z-index:25;touch-action:auto}
+  .areasheet.open{transform:translateY(0)}
+  .areasheet .row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .areasheet h3{margin:0;font-size:16px;font-weight:650}
+  .recent{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;
+    transition:opacity .2s;z-index:24}
+  .scrim.open{opacity:1;pointer-events:auto}
 </style>
 </head>
 <body>
 
-<video id="cam" playsinline autoplay muted></video>
+<div id="camwrap"><video id="cam" playsinline autoplay muted></video></div>
 <div id="flash"></div>
 
 <div class="topbar">
@@ -107,13 +118,26 @@
   <div class="count"><b id="ct">0</b> photos</div>
 </div>
 
+<button class="stall" id="stall">Camera stalled. Tap to restart.</button>
+
+<div class="zoomrow" id="zoomRow"></div>
+
 <div class="dock">
   <button id="thumb" class="empty" aria-label="Review photos"></button>
   <button id="shutter" aria-label="Take photo"></button>
-  <div class="spacer"></div>
+  <button id="undo">Undo</button>
 </div>
 
-<!-- gallery -->
+<div class="scrim" id="scrim"></div>
+<div class="areasheet" id="areaSheet">
+  <div class="row">
+    <h3>Area</h3>
+    <button class="btn right" id="areaDone">Done</button>
+  </div>
+  <input type="text" id="areaInput" placeholder="Level 2, Exterior, Mech Room" autocomplete="off">
+  <div class="recent" id="areaRecent"></div>
+</div>
+
 <section class="sheet" id="gal">
   <div class="sheethead">
     <button class="btn" id="galClose">Camera</button>
@@ -123,7 +147,6 @@
   <div class="empty" id="galEmpty" style="display:none">No photos yet.</div>
 </section>
 
-<!-- detail -->
 <section class="sheet" id="det">
   <div class="sheethead">
     <button class="btn" id="detClose">Back</button>
@@ -143,15 +166,16 @@
   </div>
 </section>
 
-<div class="msg" id="msg"><div><div id="msgText"></div><button class="btn" id="msgBtn">Try again</button></div></div>
-
 <script>
 const TAGS = ["Observation","Issue","Action","Safety"];
 const $ = s => document.querySelector(s);
-let db, stream, area = localStorage.getItem("area") || "", count = 0, busy = false, cur = null;
+let db, stream, track, area = localStorage.getItem("area") || "";
+let recent = JSON.parse(localStorage.getItem("recentAreas") || "[]");
+let count = 0, busy = false, cur = null, lastId = null, undoTimer = null;
+let nativeZoom = null, zoom = 1, maxZoom = 5;
 
 /* ---------- storage ---------- */
-function open(){
+function openDB(){
   return new Promise((res,rej)=>{
     const r = indexedDB.open("rdg-sitevisit",1);
     r.onupgradeneeded = e => {
@@ -162,29 +186,97 @@ function open(){
     r.onerror = () => rej(r.error);
   });
 }
-function tx(mode){ return db.transaction("photos",mode).objectStore("photos"); }
-function put(rec){ return new Promise(res=>{ const r = tx("readwrite").put(rec); r.onsuccess=()=>res(r.result); }); }
-function all(){ return new Promise(res=>{ const r = tx("readonly").getAll(); r.onsuccess=()=>res(r.result); }); }
-function get(id){ return new Promise(res=>{ const r = tx("readonly").get(id); r.onsuccess=()=>res(r.result); }); }
-function del(id){ return new Promise(res=>{ const r = tx("readwrite").delete(id); r.onsuccess=()=>res(); }); }
-function countAll(){ return new Promise(res=>{ const r = tx("readonly").count(); r.onsuccess=()=>res(r.result); }); }
+const store = m => db.transaction("photos",m).objectStore("photos");
+const put   = r  => new Promise(res=>{ const q=store("readwrite").put(r); q.onsuccess=()=>res(q.result); });
+const all   = () => new Promise(res=>{ const q=store("readonly").getAll(); q.onsuccess=()=>res(q.result); });
+const one   = id => new Promise(res=>{ const q=store("readonly").get(id); q.onsuccess=()=>res(q.result); });
+const drop  = id => new Promise(res=>{ const q=store("readwrite").delete(id); q.onsuccess=()=>res(); });
+const num   = () => new Promise(res=>{ const q=store("readonly").count(); q.onsuccess=()=>res(q.result); });
 
 /* ---------- camera ---------- */
 async function startCam(){
   try{
+    if(stream) stream.getTracks().forEach(t=>t.stop());
     stream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:{ideal:"environment"}, width:{ideal:2560}, height:{ideal:1440} },
       audio:false
     });
-    $("#cam").srcObject = stream;
-    $("#msg").classList.remove("show");
+    track = stream.getVideoTracks()[0];
+    const v = $("#cam");
+    v.srcObject = stream;
+    await v.play().catch(()=>{});
+
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    nativeZoom = (caps.zoom && caps.zoom.max > caps.zoom.min) ? caps.zoom : null;
+    maxZoom = nativeZoom ? Math.min(caps.zoom.max, 8) : 5;
+    zoom = 1;
+    buildZoomRow();
+    applyZoom();
+    $("#stall").classList.remove("show");
   }catch(err){
-    $("#msgText").textContent =
-      "Camera is not available. Allow camera access for this site, then try again. "
-      + "On iPhone this needs to run over https.";
-    $("#msg").classList.add("show");
+    $("#stall").textContent = "Camera blocked. Tap to try again.";
+    $("#stall").classList.add("show");
   }
 }
+
+setInterval(() => {
+  if(document.hidden) return;
+  const v = $("#cam");
+  const dead = !stream || !track || track.readyState !== "live" || v.paused || v.readyState < 2;
+  if(dead){
+    v.play().catch(()=>{});
+    $("#stall").textContent = "Camera stalled. Tap to restart.";
+    $("#stall").classList.add("show");
+  }else{
+    $("#stall").classList.remove("show");
+  }
+}, 1500);
+
+$("#stall").onclick = e => { e.stopPropagation(); startCam(); };
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden) return;
+  const v = $("#cam");
+  v.play().catch(()=>{});
+  if(!stream || !track || track.readyState !== "live") startCam();
+});
+
+/* ---------- zoom ---------- */
+function applyZoom(){
+  zoom = Math.max(1, Math.min(maxZoom, zoom));
+  if(nativeZoom && track){
+    const span = nativeZoom.max - nativeZoom.min;
+    const val = nativeZoom.min + span * (zoom - 1) / Math.max(0.001, maxZoom - 1);
+    track.applyConstraints({ advanced:[{ zoom: val }] }).catch(()=>{});
+    $("#cam").style.transform = "scale(1)";
+  }else{
+    $("#cam").style.transform = "scale(" + zoom + ")";
+  }
+  document.querySelectorAll(".zchip").forEach(c =>
+    c.classList.toggle("on", Math.abs(parseFloat(c.dataset.z) - zoom) < 0.06));
+}
+function buildZoomRow(){
+  const row = $("#zoomRow"); row.innerHTML = "";
+  [1,2,3].filter(z => z <= maxZoom).forEach(z => {
+    const b = document.createElement("button");
+    b.className = "zchip";
+    b.dataset.z = z; b.textContent = z + "x";
+    b.onclick = e => { e.stopPropagation(); zoom = z; applyZoom(); };
+    row.appendChild(b);
+  });
+}
+let pinchStart = 0, zoomStart = 1;
+const wrap = $("#camwrap");
+const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+wrap.addEventListener("touchstart", e => {
+  if(e.touches.length === 2){ pinchStart = dist(e.touches); zoomStart = zoom; }
+}, {passive:true});
+wrap.addEventListener("touchmove", e => {
+  if(e.touches.length === 2 && pinchStart){
+    zoom = zoomStart * (dist(e.touches) / pinchStart);
+    applyZoom();
+  }
+}, {passive:true});
+wrap.addEventListener("touchend", () => { pinchStart = 0; }, {passive:true});
 
 /* ---------- capture ---------- */
 const canvas = document.createElement("canvas");
@@ -194,44 +286,110 @@ const MAX = 1600;
 function shoot(){
   const v = $("#cam");
   if(busy || !v.videoWidth) return;
+  if($("#areaSheet").classList.contains("open")) return;
   busy = true;
   $("#shutter").classList.add("busy");
   $("#flash").classList.add("on");
   requestAnimationFrame(()=>$("#flash").classList.remove("on"));
 
   const ts = Date.now();
-  const scale = Math.min(1, MAX / Math.max(v.videoWidth, v.videoHeight));
-  canvas.width  = Math.round(v.videoWidth  * scale);
-  canvas.height = Math.round(v.videoHeight * scale);
-  ctx.drawImage(v,0,0,canvas.width,canvas.height);
+  const crop = nativeZoom ? 1 : zoom;
+  const sw = v.videoWidth / crop, sh = v.videoHeight / crop;
+  const sx = (v.videoWidth - sw) / 2, sy = (v.videoHeight - sh) / 2;
+  const scale = Math.min(1, MAX / Math.max(sw, sh));
+  canvas.width  = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-  count++;
-  paintCount();
+  count++; paintCount();
 
   canvas.toBlob(async blob => {
-    await put({ ts, blob, note:"", tag:"", area, seq:count });
+    lastId = await put({ ts, blob, note:"", tag:"", area, seq:count });
     setThumb(blob);
+    showUndo();
     busy = false;
     $("#shutter").classList.remove("busy");
   }, "image/jpeg", 0.7);
 }
+
+wrap.addEventListener("click", e => {
+  if(e.target.id === "cam" || e.target.id === "camwrap") shoot();
+});
+$("#shutter").addEventListener("click", e => { e.stopPropagation(); shoot(); });
+
+function showUndo(){
+  const u = $("#undo");
+  u.classList.add("show");
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(()=>u.classList.remove("show"), 6000);
+}
+$("#undo").onclick = async e => {
+  e.stopPropagation();
+  if(lastId == null) return;
+  await drop(lastId);
+  lastId = null;
+  count = await num(); paintCount();
+  const recs = (await all()).sort((a,b)=>a.ts-b.ts);
+  if(recs.length) setThumb(recs[recs.length-1].blob);
+  else { $("#thumb").style.backgroundImage = ""; $("#thumb").classList.add("empty"); }
+  $("#undo").classList.remove("show");
+};
 
 let thumbUrl = null;
 function setThumb(blob){
   if(thumbUrl) URL.revokeObjectURL(thumbUrl);
   thumbUrl = URL.createObjectURL(blob);
   const t = $("#thumb");
-  t.style.backgroundImage = `url(${thumbUrl})`;
+  t.style.backgroundImage = "url(" + thumbUrl + ")";
   t.classList.remove("empty");
 }
 function paintCount(){
   $("#ct").textContent = count;
   const t = $("#thumb");
   let b = t.querySelector(".badge");
-  if(!b){ b = document.createElement("span"); b.className="badge"; t.appendChild(b); }
+  if(!b){ b = document.createElement("span"); b.className = "badge"; t.appendChild(b); }
   b.textContent = count;
   b.style.display = count ? "grid" : "none";
 }
+
+/* ---------- area sheet ---------- */
+function openArea(){
+  $("#areaInput").value = area;
+  drawRecent();
+  $("#areaSheet").classList.add("open");
+  $("#scrim").classList.add("open");
+  setTimeout(()=>$("#areaInput").focus(), 260);
+}
+function closeArea(save){
+  if(save){
+    area = $("#areaInput").value.trim();
+    localStorage.setItem("area", area);
+    if(area && recent.indexOf(area) === -1){
+      recent.unshift(area); recent = recent.slice(0,8);
+      localStorage.setItem("recentAreas", JSON.stringify(recent));
+    }
+    paintArea();
+  }
+  $("#areaInput").blur();
+  $("#areaSheet").classList.remove("open");
+  $("#scrim").classList.remove("open");
+  $("#cam").play().catch(()=>{});
+}
+function drawRecent(){
+  const r = $("#areaRecent"); r.innerHTML = "";
+  recent.forEach(a => {
+    const b = document.createElement("button");
+    b.className = "tag" + (a === area ? " on" : "");
+    b.textContent = a;
+    b.onclick = () => { $("#areaInput").value = a; closeArea(true); };
+    r.appendChild(b);
+  });
+}
+function paintArea(){ $("#areaBtn").textContent = area || "Set area"; }
+$("#areaBtn").onclick = e => { e.stopPropagation(); openArea(); };
+$("#areaDone").onclick = () => closeArea(true);
+$("#scrim").onclick = () => closeArea(true);
+$("#areaInput").addEventListener("keydown", e => { if(e.key === "Enter") closeArea(true); });
 
 /* ---------- gallery ---------- */
 let urls = [];
@@ -240,26 +398,24 @@ async function openGal(){
   urls.forEach(URL.revokeObjectURL); urls = [];
   const g = $("#grid"); g.innerHTML = "";
   $("#galEmpty").style.display = recs.length ? "none" : "block";
-  $("#galTitle").textContent = recs.length ? `${recs.length} photos` : "Visit";
+  $("#galTitle").textContent = recs.length ? recs.length + " photos" : "Visit";
   recs.forEach((r,i)=>{
     const u = URL.createObjectURL(r.blob); urls.push(u);
     const c = document.createElement("button");
     c.className = "cell" + (r.note || r.tag ? " noted" : "");
-    c.style.backgroundImage = `url(${u})`;
-    c.innerHTML = `<span class="n">${String(i+1).padStart(3,"0")}</span>`
-                + `<span class="t">${fmt(r.ts)}</span>`;
+    c.style.backgroundImage = "url(" + u + ")";
+    c.innerHTML = '<span class="n">' + String(i+1).padStart(3,"0") + '</span>'
+                + '<span class="t">' + fmt(r.ts) + '</span>';
     c.onclick = () => openDet(r.id, i+1);
     g.appendChild(c);
   });
   $("#gal").classList.add("open");
 }
-function fmt(ts){
-  return new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
-}
+const fmt = ts => new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 
 /* ---------- detail ---------- */
 async function openDet(id, n){
-  cur = await get(id);
+  cur = await one(id);
   $("#detTitle").textContent = "Observation " + String(n).padStart(3,"0");
   $("#detImg").src = URL.createObjectURL(cur.blob);
   $("#detMeta").textContent = new Date(cur.ts).toLocaleString([], {
@@ -273,53 +429,47 @@ function drawTags(active){
   const row = $("#tagRow"); row.innerHTML = "";
   TAGS.forEach(t=>{
     const b = document.createElement("button");
-    b.className = "tag" + (t===active ? " on" : "");
+    b.className = "tag" + (t === active ? " on" : "");
     b.textContent = t;
-    b.onclick = () => { cur.tag = (cur.tag===t ? "" : t); drawTags(cur.tag); };
+    b.onclick = () => { cur.tag = (cur.tag === t ? "" : t); drawTags(cur.tag); };
     row.appendChild(b);
   });
 }
-
-/* ---------- wiring ---------- */
-$("#shutter").addEventListener("click", shoot);
-$("#thumb").addEventListener("click", openGal);
+$("#thumb").addEventListener("click", e => { e.stopPropagation(); openGal(); });
 $("#galClose").onclick = () => $("#gal").classList.remove("open");
 $("#detClose").onclick = () => $("#det").classList.remove("open");
-
 $("#detSave").onclick = async () => {
   cur.note = $("#detNote").value.trim();
   cur.area = $("#detArea").value.trim();
-  if(cur.area){ area = cur.area; localStorage.setItem("area", area); paintArea(); }
+  if(cur.area){
+    area = cur.area;
+    localStorage.setItem("area", area);
+    if(recent.indexOf(area) === -1){
+      recent.unshift(area); recent = recent.slice(0,8);
+      localStorage.setItem("recentAreas", JSON.stringify(recent));
+    }
+    paintArea();
+  }
   await put(cur);
   $("#det").classList.remove("open");
   openGal();
 };
 $("#detDel").onclick = async () => {
-  if(!confirm("Delete this photo?")) return;
-  await del(cur.id);
-  count = await countAll(); paintCount();
+  await drop(cur.id);
+  count = await num(); paintCount();
   $("#det").classList.remove("open");
   openGal();
 };
-$("#areaBtn").onclick = () => {
-  const v = prompt("Area for the next photos", area);
-  if(v === null) return;
-  area = v.trim(); localStorage.setItem("area", area); paintArea();
-};
-function paintArea(){ $("#areaBtn").textContent = area || "Set area"; }
-$("#msgBtn").onclick = startCam;
-
-/* keep the stream alive when returning from the home screen */
-document.addEventListener("visibilitychange", () => {
-  if(!document.hidden && (!stream || !stream.active)) startCam();
-});
 
 (async function init(){
-  db = await open();
-  count = await countAll();
+  db = await openDB();
+  count = await num();
   paintCount(); paintArea();
   const recs = await all();
-  if(recs.length) setThumb(recs.sort((a,b)=>a.ts-b.ts).at(-1).blob);
+  if(recs.length){
+    recs.sort((a,b)=>a.ts-b.ts);
+    setThumb(recs[recs.length-1].blob);
+  }
   startCam();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
