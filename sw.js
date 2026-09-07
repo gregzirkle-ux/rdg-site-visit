@@ -1,4 +1,4 @@
-const CACHE = "rdg-sv-7";
+const CACHE = "rdg-sv-8";
 const FILES = ["./index.html","./report.js","./docx.umd.js","./logo.png",
                "./manifest.json","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 

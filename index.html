@@ -27,8 +27,9 @@
     display:flex;align-items:center;gap:8px;z-index:5;
     background:linear-gradient(180deg,rgba(0,0,0,.62),rgba(0,0,0,0))}
   .chip{border:1px solid var(--line);background:rgba(0,0,0,.38);color:#fff;
-    padding:7px 12px;border-radius:100px;font-size:13px;backdrop-filter:blur(8px);
-    max-width:44vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    padding:7px 11px;border-radius:100px;font-size:13px;backdrop-filter:blur(8px);
+    flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #areaBtn{flex:1 1 auto;min-width:54px}
   .chip:active{background:rgba(255,255,255,.2)}
   .count{margin-left:auto;font-variant-numeric:tabular-nums;font-size:13px;opacity:.9;white-space:nowrap}
   .count b{font-size:19px;font-weight:600}
@@ -66,6 +67,7 @@
     transform:translateY(100%);transition:transform .22s ease;overflow-y:auto;
     -webkit-overflow-scrolling:touch;z-index:20;touch-action:auto}
   .sheet.open{transform:translateY(0)}
+  #vis{z-index:23}
   .sheethead{position:sticky;top:0;background:var(--paper);z-index:2;
     padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;
     display:flex;align-items:center;gap:12px;border-bottom:1px solid #dedbd6}
@@ -138,6 +140,14 @@
   .frow:focus-within{background:#fff;box-shadow:inset 3px 0 0 var(--red)}
   .frow:focus-within label{color:var(--red);padding-left:9px}
   .frow:focus-within input[type=text]{padding-right:9px}
+  .past{margin-top:28px;border-top:1px solid #e2dfda;padding-top:14px}
+  .prow{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;
+    border-bottom:1px solid #e2dfda;padding:13px 0;font:inherit;text-align:left;color:var(--ink)}
+  .prow:active{background:#fff}
+  .prow .pn{font-weight:650;font-size:15px;flex:0 0 76px}
+  .prow .pd{font-size:14px;color:#7a736c;flex:1;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .prow .po{font-size:14px;font-weight:600;color:var(--red);flex:0 0 auto}
   .metaLines{margin-top:22px;display:flex;flex-wrap:wrap;gap:4px 16px;
     font-size:12.5px;color:#a39c95;font-variant-numeric:tabular-nums}
   .busywrap{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;place-items:center;
@@ -152,9 +162,10 @@
 <div id="flash"></div>
 
 <div class="topbar">
+  <button class="chip" id="pauseBtn">Pause</button>
   <button class="chip" id="projBtn">Visit info</button>
   <button class="chip" id="areaBtn">Set area</button>
-  <button class="chip" id="finishBtn" style="margin-left:auto;border-color:#fff">Finish</button>
+  <button class="chip" id="finishBtn" style="border-color:#fff">Finish</button>
 </div>
 
 <button class="stall" id="stall">Camera stalled. Tap to restart.</button>
@@ -179,7 +190,7 @@
 <!-- visit info -->
 <section class="sheet" id="vis">
   <div class="sheethead">
-    <button class="btn" id="visClose">Camera</button>
+    <button class="btn" id="visClose">Back</button>
     <h2>Visit info</h2>
     <button class="btn right" id="visSave">Save</button>
   </div>
@@ -195,7 +206,7 @@
     <input type="text" id="vWx" placeholder="Fetched automatically">
     <input type="text" id="vTemp" placeholder="Temperature">
     <div class="auto" id="vAuto"></div>
-    <button class="ghost" id="vNew">End this visit and go back</button>
+    <button class="ghost" id="vPause">Pause and go to Start</button>
   </div>
 </section>
 
@@ -211,6 +222,10 @@
   <div class="pad">
     <button class="primary" id="galBuild">Build the report</button>
     <button class="ghost" id="galBack">Keep shooting</button>
+    <button class="ghost" id="galInfo">Visit info</button>
+    <button class="ghost" id="galPause">Pause and go to Start</button>
+    <button class="ghost" id="galToStart" style="display:none">Back to Start</button>
+    <button class="danger" id="galEnd">End this visit without a report</button>
   </div>
 </section>
 
@@ -254,6 +269,7 @@
     <div class="auto" id="doneNote" style="margin-top:8px"></div>
     <button class="primary" id="doneShare">Email or share</button>
     <button class="ghost" id="doneSave">Save to Files</button>
+    <button class="ghost" id="doneStart">Back to Start</button>
   </div>
 </section>
 
@@ -276,17 +292,24 @@
     <div class="frow"><label for="sfBy">PREPARED BY</label>
       <input type="text" id="sfBy" placeholder="Your name" autocomplete="off" autocapitalize="words"></div>
   </div>
+  <div class="past" id="pastWrap" style="display:none">
+    <div class="fieldnote" style="margin-top:0">PAST VISITS</div>
+    <div id="pastList"></div>
+  </div>
   <div class="metaLines">
     <span id="sNum">SVR 001</span><span id="sDate"></span><span id="sBuild"></span>
   </div>
 </section>
 
-<div class="busywrap" id="busyWrap"><div id="busyText">Building report</div></div>
+<div class="busywrap" id="busyWrap"><div>
+  <div id="busyText">Building report</div>
+  <button class="ghost" id="busyClose" style="display:none;margin-top:20px">Back</button>
+</div></div>
 
 <script src="docx.umd.js"></script>
 <script src="report.js"></script>
 <script>
-const BUILD = "v7";
+const BUILD = "v8";
 const TAGS = ["Observation","Issue","Action","Safety"];
 const DUES = ["Next visit","One week","Two weeks"];
 const $ = s => document.querySelector(s);
@@ -294,12 +317,16 @@ let db, stream, track, visit = null;
 let area = localStorage.getItem("area") || "";
 let recent = JSON.parse(localStorage.getItem("recentAreas") || "[]");
 let count = 0, busy = false, cur = null, lastId = null, undoTimer = null;
+let reviewing = false;   /* looking at a past visit, camera is off */
 let nativeZoom = null, zoom = 1, maxZoom = 5;
 
-/* ---------- storage ---------- */
+/* ---------- storage ----------
+   photos holds the blob and is written once, at capture, and never again.
+   meta holds the note, tag, area and so on, keyed by the same id.
+   Rewriting a photo record to save a note is what emptied the blobs on iOS. */
 function openDB(){
   return new Promise((res,rej)=>{
-    const r = indexedDB.open("rdg-sitevisit", 2);
+    const r = indexedDB.open("rdg-sitevisit", 3);
     r.onupgradeneeded = e => {
       const idb = e.target.result;
       if(!idb.objectStoreNames.contains("photos")){
@@ -308,6 +335,9 @@ function openDB(){
       }
       if(!idb.objectStoreNames.contains("visits")){
         idb.createObjectStore("visits",{keyPath:"id",autoIncrement:true});
+      }
+      if(!idb.objectStoreNames.contains("meta")){
+        idb.createObjectStore("meta",{keyPath:"id"});
       }
     };
     r.onsuccess = e => res(e.target.result);
@@ -319,18 +349,40 @@ const putP  = r  => new Promise(res=>{ const q=st("photos","readwrite").put(r); 
 const allP  = () => new Promise(res=>{ const q=st("photos","readonly").getAll(); q.onsuccess=()=>res(q.result); });
 const oneP  = id => new Promise(res=>{ const q=st("photos","readonly").get(id); q.onsuccess=()=>res(q.result); });
 const dropP = id => new Promise(res=>{ const q=st("photos","readwrite").delete(id); q.onsuccess=()=>res(); });
+const putM  = r  => new Promise(res=>{ const q=st("meta","readwrite").put(r); q.onsuccess=()=>res(q.result); });
+const allM  = () => new Promise(res=>{ const q=st("meta","readonly").getAll(); q.onsuccess=()=>res(q.result); });
+const oneM  = id => new Promise(res=>{ const q=st("meta","readonly").get(id); q.onsuccess=()=>res(q.result); });
+const dropM = id => new Promise(res=>{ const q=st("meta","readwrite").delete(id); q.onsuccess=()=>res(); });
 const putV  = r  => new Promise(res=>{ const q=st("visits","readwrite").put(r); q.onsuccess=()=>res(q.result); });
 const allV  = () => new Promise(res=>{ const q=st("visits","readonly").getAll(); q.onsuccess=()=>res(q.result); });
 
+const NOTE_KEYS = ["note","tag","area","sheet","owner","due"];
+/* photos taken on an older build kept their notes on the photo record, so read those too */
+function joinMeta(pr, mr){
+  const out = { id: pr.id, visitId: pr.visitId, ts: pr.ts, blob: pr.blob };
+  NOTE_KEYS.forEach(k => {
+    out[k] = (mr && mr[k] != null && mr[k] !== "") ? mr[k] : (pr[k] || "");
+  });
+  return out;
+}
+async function photosFor(vid){
+  const [ps, ms] = await Promise.all([allP(), allM()]);
+  const byId = {}; ms.forEach(m => { byId[m.id] = m; });
+  return ps.filter(r => r.visitId === vid).sort((a,b)=>a.ts-b.ts).map(r => joinMeta(r, byId[r.id]));
+}
+async function countFor(vid){
+  return (await allP()).filter(r => r.visitId === vid).length;
+}
+
 async function visitPhotos(){
   if(!visit) return [];
-  const recs = await allP();
-  return recs.filter(r => r.visitId === visit.id).sort((a,b)=>a.ts-b.ts);
+  return photosFor(visit.id);
 }
 
 /* ---------- visit lifecycle: start, capture, finish ---------- */
 let pending = null;      /* an unfinished visit from a previous launch */
 let nextNum = 1;
+let allVisits = [];
 
 /* the four fields that carry from one visit to the next, editable on the start screen */
 const CARRY_KEYS = ["project","projNum","attendees","preparedBy"];
@@ -343,7 +395,8 @@ async function loadState(){
   const vs = (await allV()).sort((a,b)=>a.id-b.id);
   const last = vs[vs.length-1];
   nextNum = last ? last.num + 1 : 1;
-  pending = vs.filter(v => !v.exported).pop() || null;
+  pending = vs.filter(v => !v.exported && !v.closed).pop() || null;
+  allVisits = vs;
   if(pending) nextNum = pending.num;
 
   /* first launch after this update: seed the fields from the visit already on the phone */
@@ -390,6 +443,39 @@ async function paintStart(){
     $("#startBtn").textContent = "Start new visit";
     $("#sFieldNote").textContent = "CARRIES INTO THE NEXT REPORT";
   }
+  await paintPast();
+}
+
+/* Past visits stay in the app. Open one to read it, add notes, or build and send
+   the report again. iOS does not let a web app read your Files folder, so this
+   list is the way back into anything you have already shot. */
+async function paintPast(){
+  const past = allVisits.filter(v => !pending || v.id !== pending.id)
+                        .sort((a,b) => b.id - a.id).slice(0, 8);
+  const wrap = $("#pastWrap"), list = $("#pastList");
+  list.innerHTML = "";
+  if(!past.length){ wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  const ps = await allP();
+  past.forEach(v => {
+    const n = ps.filter(r => r.visitId === v.id).length;
+    const b = document.createElement("button");
+    b.className = "prow";
+    b.innerHTML = '<span class="pn">' + svr(v.num) + '</span>'
+      + '<span class="pd">' + new Date(v.date).toLocaleDateString([], {month:"short", day:"numeric"})
+      + "   " + n + (n === 1 ? " photo" : " photos")
+      + (v.project ? "   " + v.project : "") + '</span>'
+      + '<span class="po">Open</span>';
+    b.onclick = () => openPast(v);
+    list.appendChild(b);
+  });
+}
+
+async function openPast(v){
+  visit = v;
+  reviewing = true;
+  $("#start").classList.add("hide");
+  await openGal();
 }
 
 /* edit in place: typing saves to the carry, and to the open visit when there is one */
@@ -434,11 +520,8 @@ async function newVisit(){
 
 async function enterCapture(v){
   visit = v;
+  reviewing = false;
   if(!visit.started){ visit.started = Date.now(); await putV(visit); }
-
-  /* photos taken before visits existed get adopted once */
-  const orphans = (await allP()).filter(r => r.visitId == null);
-  for(const o of orphans){ o.visitId = visit.id; await putP(o); }
 
   $("#start").classList.add("hide");
   await refreshCount();
@@ -449,7 +532,12 @@ async function enterCapture(v){
 
 async function backToStart(){
   visit = null;
+  reviewing = false;
+  readyBlob = null;
   if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; track = null; }
+  ["#gal","#det","#vis","#done"].forEach(id => $(id).classList.remove("open"));
+  $("#busyWrap").classList.remove("show");
+  $("#areaSheet").classList.remove("open"); $("#scrim").classList.remove("open");
   await loadState();
   $("#start").classList.remove("hide");
 }
@@ -469,13 +557,11 @@ $("#resumeBtn").onclick = async () => {
   if(pending) enterCapture(pending);
 };
 $("#finishBtn").onclick = e => { e.stopPropagation(); openGal(); };
+$("#pauseBtn").onclick = async e => { e.stopPropagation(); await backToStart(); };
 
 function paintProj(){
   if(!visit) return;
-  const t = visit.started
-    ? new Date(visit.started).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})
-    : "";
-  $("#projBtn").textContent = "SVR " + String(visit.num).padStart(3,"0") + (t ? "  " + t : "");
+  $("#projBtn").textContent = svr(visit.num);
 }
 
 /* weather, silent, best effort */
@@ -524,7 +610,7 @@ async function startCam(){
 }
 setInterval(() => {
   if(document.hidden) return;
-  if(!visit || !$("#start").classList.contains("hide")) return;
+  if(!visit || reviewing || !$("#start").classList.contains("hide")) return;
   if(document.querySelector(".sheet.open")) return;
   const v = $("#cam");
   const dead = !stream || !track || track.readyState !== "live" || v.paused || v.readyState < 2;
@@ -533,7 +619,7 @@ setInterval(() => {
 }, 1500);
 $("#stall").onclick = e => { e.stopPropagation(); startCam(); };
 document.addEventListener("visibilitychange", () => {
-  if(document.hidden || !visit) return;
+  if(document.hidden || !visit || reviewing) return;
   $("#cam").play().catch(()=>{});
   if(!stream || !track || track.readyState !== "live") startCam();
 });
@@ -574,7 +660,7 @@ const ctx = canvas.getContext("2d");
 const MAX = 1600;
 function shoot(){
   const v = $("#cam");
-  if(busy || !v.videoWidth || !visit) return;
+  if(busy || !v.videoWidth || !visit || reviewing) return;
   if($("#areaSheet").classList.contains("open")) return;
   busy = true;
   $("#shutter").classList.add("busy");
@@ -592,7 +678,8 @@ function shoot(){
 
   count++; paintCount();
   canvas.toBlob(async blob => {
-    lastId = await putP({ visitId: visit.id, ts, blob, note:"", tag:"", area, sheet:"", owner:"", due:"" });
+    lastId = await putP({ visitId: visit.id, ts, blob });
+    await putM({ id: lastId, note:"", tag:"", area, sheet:"", owner:"", due:"" });
     setThumb(blob); showUndo();
     busy = false; $("#shutter").classList.remove("busy");
   }, "image/jpeg", 0.7);
@@ -608,7 +695,7 @@ function showUndo(){
 $("#undo").onclick = async e => {
   e.stopPropagation();
   if(lastId == null) return;
-  await dropP(lastId); lastId = null;
+  await dropP(lastId); await dropM(lastId); lastId = null;
   await refreshCount();
   $("#undo").classList.remove("show");
 };
@@ -672,6 +759,7 @@ $("#areaInput").addEventListener("keydown", e => { if(e.key === "Enter") closeAr
 /* ---------- visit info ---------- */
 $("#projBtn").onclick = e => { e.stopPropagation(); openVisitInfo(); };
 function openVisitInfo(){
+  if(!visit) return;
   $("#vProject").value = visit.project || "";
   $("#vNum").value = visit.projNum || "";
   $("#vAtt").value = visit.attendees || "";
@@ -697,7 +785,7 @@ $("#visSave").onclick = async () => {
   await paintStart();
   $("#vis").classList.remove("open");
 };
-$("#vNew").onclick = async () => {
+$("#vPause").onclick = async () => {
   $("#vis").classList.remove("open");
   await backToStart();
 };
@@ -709,7 +797,13 @@ async function openGal(){
   urls.forEach(URL.revokeObjectURL); urls = [];
   const g = $("#grid"); g.innerHTML = "";
   $("#galEmpty").style.display = recs.length ? "none" : "block";
-  $("#galTitle").textContent = "SVR " + String(visit.num).padStart(3,"0") + "   " + recs.length + " photos";
+  $("#galTitle").textContent = svr(visit.num) + "   " + recs.length
+    + (recs.length === 1 ? " photo" : " photos");
+  $("#galClose").textContent = reviewing ? "Start" : "Camera";
+  $("#galBack").style.display  = reviewing ? "none" : "block";
+  $("#galPause").style.display = reviewing ? "none" : "block";
+  $("#galEnd").style.display   = reviewing ? "none" : "block";
+  $("#galToStart").style.display = reviewing ? "block" : "none";
   $("#galBuild").disabled = !recs.length;
   $("#galExport").disabled = !recs.length;
   recs.forEach((r,i)=>{
@@ -725,30 +819,63 @@ async function openGal(){
 }
 const fmt = ts => new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 $("#thumb").addEventListener("click", e => { e.stopPropagation(); openGal(); });
-$("#galClose").onclick = () => $("#gal").classList.remove("open");
+$("#galClose").onclick = async () => {
+  if(reviewing){ await backToStart(); return; }
+  $("#gal").classList.remove("open");
+};
 $("#galBack").onclick  = () => $("#gal").classList.remove("open");
 $("#galBuild").onclick = () => $("#galExport").click();
+$("#galInfo").onclick  = () => openVisitInfo();
+$("#galPause").onclick = async () => { await backToStart(); };
+$("#galToStart").onclick = async () => { await backToStart(); };
+$("#galEnd").onclick = async () => {
+  const n = await countFor(visit.id);
+  const ok = confirm("Close " + svr(visit.num) + " without building a report? "
+    + "The " + n + (n === 1 ? " photo stays" : " photos stay") + " in the app under Past visits.");
+  if(!ok) return;
+  visit.closed = true;
+  await putV(visit);
+  await backToStart();
+};
 
 /* ---------- export ---------- */
 let readyBlob = null, readyName = "";
 
+function busyFail(msg){
+  $("#busyText").textContent = msg;
+  $("#busyClose").style.display = "block";
+}
+$("#busyClose").onclick = () => {
+  $("#busyWrap").classList.remove("show");
+  $("#busyClose").style.display = "none";
+};
+
 $("#galExport").onclick = async () => {
   const recs = await visitPhotos();
   if(!recs.length) return;
-  $("#busyText").textContent = "Building report from " + recs.length + " photos";
+  $("#busyClose").style.display = "none";
+  $("#busyText").textContent = "Building report from " + recs.length
+    + (recs.length === 1 ? " photo" : " photos");
   $("#busyWrap").classList.add("show");
   try{
+    /* an unreadable photo used to surface as a vague Safari error halfway through */
+    const bad = recs.filter(r => !r.blob || !r.blob.size);
+    if(bad.length){
+      throw new Error(bad.length + (bad.length === 1 ? " photo is" : " photos are")
+        + " unreadable. Close the app fully, reopen it, and build again.");
+    }
     readyBlob = await window.SVReport.buildReport(visit, recs);
     readyName = window.SVReport.reportFileName(visit);
     $("#busyWrap").classList.remove("show");
     $("#doneName").textContent = readyName;
-    $("#doneNote").textContent = recs.length + " observations, "
+    $("#doneNote").textContent = recs.length
+      + (recs.length === 1 ? " observation, " : " observations, ")
       + Math.round(readyBlob.size / 1024) + " KB";
     $("#done").classList.add("open");
   }catch(err){
-    $("#busyText").textContent = "Could not build the report: "
-      + (err && err.message ? err.message : "unknown problem");
-    setTimeout(()=>$("#busyWrap").classList.remove("show"), 6000);
+    busyFail("Could not build the report. "
+      + (err && err.message ? err.message : "Unknown problem.")
+      + " Nothing was lost, your photos are still here.");
   }
 };
 
@@ -791,10 +918,12 @@ async function markExported(){
   await backToStart();
 }
 $("#doneClose").onclick = () => $("#done").classList.remove("open");
+$("#doneStart").onclick = async () => { await backToStart(); };
 
 /* ---------- detail ---------- */
 async function openDet(id, n){
-  cur = await oneP(id);
+  const pr = await oneP(id);
+  cur = joinMeta(pr, await oneM(id));
   $("#detTitle").textContent = "Observation " + String(n).padStart(3,"0");
   $("#detImg").src = URL.createObjectURL(cur.blob);
   $("#detMeta").textContent = new Date(cur.ts).toLocaleString([], {
@@ -829,24 +958,30 @@ function drawDue(active){
 }
 $("#detClose").onclick = () => $("#det").classList.remove("open");
 $("#detSave").onclick = async () => {
-  cur.note = $("#detNote").value.trim();
-  cur.area = $("#detArea").value.trim();
-  cur.sheet = $("#detSheet").value.trim();
-  cur.owner = $("#detOwner").value.trim();
-  if(cur.area){
-    area = cur.area; localStorage.setItem("area", area);
+  const m = {
+    id: cur.id,
+    note:  $("#detNote").value.trim(),
+    tag:   cur.tag || "",
+    area:  $("#detArea").value.trim(),
+    sheet: $("#detSheet").value.trim(),
+    owner: $("#detOwner").value.trim(),
+    due:   cur.due || ""
+  };
+  if(m.area){
+    area = m.area; localStorage.setItem("area", area);
     if(recent.indexOf(area) === -1){
       recent.unshift(area); recent = recent.slice(0,8);
       localStorage.setItem("recentAreas", JSON.stringify(recent));
     }
     paintArea();
   }
-  await putP(cur);
+  await putM(m);          /* the photo record is not touched, so the blob cannot be lost */
   $("#det").classList.remove("open");
   openGal();
 };
 $("#detDel").onclick = async () => {
   await dropP(cur.id);
+  await dropM(cur.id);
   await refreshCount();
   $("#det").classList.remove("open");
   openGal();
