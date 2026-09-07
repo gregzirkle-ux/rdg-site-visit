@@ -41,12 +41,33 @@ function ruledLines(n) {
   return out;
 }
 
+function measure(blob) {
+  return new Promise(res => {
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload  = () => { res({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(url); };
+    im.onerror = () => { res(null); URL.revokeObjectURL(url); };
+    im.src = url;
+  });
+}
+
 async function imageBits(blob) {
   const buf = await blob.arrayBuffer();
-  const bmp = await createImageBitmap(blob);
-  const h = Math.round(PHOTO_PX * (bmp.height / bmp.width));
-  bmp.close && bmp.close();
-  return { buf, w: PHOTO_PX, h };
+  let ratio = 0.75;                       /* sane default if measuring fails */
+  try {
+    if (typeof createImageBitmap === "function") {
+      const bmp = await createImageBitmap(blob);
+      ratio = bmp.height / bmp.width;
+      if (bmp.close) bmp.close();
+    } else {
+      const d = await measure(blob);
+      if (d && d.w) ratio = d.h / d.w;
+    }
+  } catch (e) {
+    const d = await measure(blob);
+    if (d && d.w) ratio = d.h / d.w;
+  }
+  return { buf, w: PHOTO_PX, h: Math.round(PHOTO_PX * ratio) };
 }
 
 function headerTable(visit, times) {
@@ -80,7 +101,12 @@ async function observationTable(recs) {
   for (let i = 0; i < recs.length; i++) {
     const r = recs[i];
     const n = String(i + 1).padStart(3, "0");
-    const img = await imageBits(r.blob);
+    let img;
+    try {
+      img = await imageBits(r.blob);
+    } catch (e) {
+      throw new Error("could not read photo " + n + " (" + (e && e.message ? e.message : "unknown") + ")");
+    }
 
     const right = [ p("OBSERVATION " + n + (r.tag ? "   |   " + r.tag.toUpperCase() : ""),
                       { bold: true, size: 20, color: RED }) ];

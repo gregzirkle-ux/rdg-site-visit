@@ -1,4 +1,4 @@
-const CACHE = "rdg-sv-3";
+const CACHE = "rdg-sv-5";
 const FILES = ["./index.html","./report.js","./docx.umd.js","./manifest.json","./icon-192.png","./icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

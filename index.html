@@ -116,6 +116,16 @@
     transition:opacity .2s;z-index:24}
   .scrim.open{opacity:1;pointer-events:auto}
 
+  .start{position:fixed;inset:0;background:var(--paper);color:var(--ink);z-index:30;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:28px calc(28px + env(safe-area-inset-left)) calc(28px + env(safe-area-inset-bottom))}
+  .start.hide{display:none}
+  .start .brand{font-size:12px;font-weight:700;letter-spacing:1.4px;color:var(--red)}
+  .start h1{margin:6px 0 22px;font-size:34px;font-weight:700;letter-spacing:-.5px}
+  .start .line{display:flex;justify-content:space-between;padding:11px 0;
+    border-bottom:1px solid #e2dfda;font-size:15px}
+  .start .line span:first-child{color:#7a736c}
+  .start .actions{margin-top:26px}
   .busywrap{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;place-items:center;
     z-index:60;text-align:center;padding:30px;backdrop-filter:blur(3px)}
   .busywrap.show{display:grid}
@@ -130,7 +140,7 @@
 <div class="topbar">
   <button class="chip" id="projBtn">Visit info</button>
   <button class="chip" id="areaBtn">Set area</button>
-  <div class="count"><b id="ct">0</b></div>
+  <button class="chip" id="finishBtn" style="margin-left:auto;border-color:#fff">Finish</button>
 </div>
 
 <button class="stall" id="stall">Camera stalled. Tap to restart.</button>
@@ -171,7 +181,7 @@
     <input type="text" id="vWx" placeholder="Fetched automatically">
     <input type="text" id="vTemp" placeholder="Temperature">
     <div class="auto" id="vAuto"></div>
-    <button class="ghost" id="vNew">Start a new visit</button>
+    <button class="ghost" id="vNew">End this visit and go back</button>
   </div>
 </section>
 
@@ -184,6 +194,10 @@
   </div>
   <div class="grid" id="grid"></div>
   <div class="empty" id="galEmpty" style="display:none">No photos yet.</div>
+  <div class="pad">
+    <button class="primary" id="galBuild">Build the report</button>
+    <button class="ghost" id="galBack">Keep shooting</button>
+  </div>
 </section>
 
 <!-- detail -->
@@ -211,6 +225,34 @@
       <div class="chips" id="dueRow"></div>
     </div>
     <button class="danger" id="detDel">Delete this photo</button>
+  </div>
+</section>
+
+<!-- report ready -->
+<section class="sheet" id="done">
+  <div class="sheethead">
+    <button class="btn" id="doneClose">Back</button>
+    <h2>Report ready</h2>
+  </div>
+  <div class="pad">
+    <div class="lbl">FILE</div>
+    <div id="doneName" style="font-size:15px;word-break:break-all"></div>
+    <div class="auto" id="doneNote" style="margin-top:8px"></div>
+    <button class="primary" id="doneShare">Email or share</button>
+    <button class="ghost" id="doneSave">Save to Files</button>
+  </div>
+</section>
+
+<section class="start" id="start">
+  <div class="brand">REDLINE DESIGN GROUP</div>
+  <h1>Site Visit</h1>
+  <div class="line"><span>Project</span><span id="sProject">Not set</span></div>
+  <div class="line"><span>Report</span><span id="sNum">SVR 001</span></div>
+  <div class="line"><span>Date</span><span id="sDate"></span></div>
+  <div class="actions">
+    <button class="primary" id="startBtn">Start visit</button>
+    <button class="ghost" id="resumeBtn" style="display:none">Resume</button>
+    <button class="ghost" id="startEdit">Edit visit info</button>
   </div>
 </section>
 
@@ -255,57 +297,112 @@ const putV  = r  => new Promise(res=>{ const q=st("visits","readwrite").put(r); 
 const allV  = () => new Promise(res=>{ const q=st("visits","readonly").getAll(); q.onsuccess=()=>res(q.result); });
 
 async function visitPhotos(){
+  if(!visit) return [];
   const recs = await allP();
   return recs.filter(r => r.visitId === visit.id).sort((a,b)=>a.ts-b.ts);
 }
 
-/* ---------- visit lifecycle ---------- */
-async function loadVisit(){
+/* ---------- visit lifecycle: start, capture, finish ---------- */
+let pending = null;      /* an unfinished visit from a previous launch */
+let nextNum = 1;
+
+async function loadState(){
   const vs = (await allV()).sort((a,b)=>a.id-b.id);
-  const open = vs.filter(v => !v.exported).pop();
-  if(open){ visit = open; }
-  else { visit = await newVisit(vs); }
-
-  /* photos saved before visits existed get adopted by the current visit */
-  const orphans = (await allP()).filter(r => r.visitId == null);
-  for(const o of orphans){ o.visitId = visit.id; await putP(o); }
-
-  paintProj();
-  fetchWeather();
+  const last = vs[vs.length-1];
+  nextNum = last ? last.num + 1 : 1;
+  pending = vs.filter(v => !v.exported).pop() || null;
+  if(pending) nextNum = pending.num;
+  await paintStart();
 }
-async function newVisit(vs){
-  const list = vs || (await allV());
-  const last = list.sort((a,b)=>a.id-b.id).pop();
+
+async function paintStart(){
+  const src = pending || (await lastVisit());
+  $("#sProject").textContent = (src && src.project) ? src.project : "Not set";
+  $("#sNum").textContent = "SVR " + String(nextNum).padStart(3,"0");
+  $("#sDate").textContent = new Date().toLocaleDateString([], {month:"long", day:"numeric", year:"numeric"});
+  if(pending){
+    const n = (await allP()).filter(r => r.visitId === pending.id).length;
+    $("#resumeBtn").style.display = "block";
+    $("#resumeBtn").textContent = "Resume SVR " + String(pending.num).padStart(3,"0")
+      + " (" + n + (n === 1 ? " photo)" : " photos)");
+    $("#startBtn").textContent = "Start a different visit";
+  }else{
+    $("#resumeBtn").style.display = "none";
+    $("#startBtn").textContent = "Start visit";
+  }
+}
+async function lastVisit(){
+  const vs = (await allV()).sort((a,b)=>a.id-b.id);
+  return vs[vs.length-1] || null;
+}
+
+async function newVisit(){
+  const last = await lastVisit();
   const v = {
     num: last ? last.num + 1 : 1,
     date: Date.now(),
-    project:  last ? last.project  : "",
-    projNum:  last ? last.projNum  : "",
-    attendees:last ? last.attendees: "",
-    preparedBy: last ? last.preparedBy : "",
+    started: Date.now(),
+    project:   last ? last.project   : "",
+    projNum:   last ? last.projNum   : "",
+    attendees: last ? last.attendees : "",
+    preparedBy:last ? last.preparedBy: "",
     weather: "", temp: "", exported: false
   };
   v.id = await putV(v);
   return v;
 }
+
+async function enterCapture(v){
+  visit = v;
+  if(!visit.started){ visit.started = Date.now(); await putV(visit); }
+
+  /* photos taken before visits existed get adopted once */
+  const orphans = (await allP()).filter(r => r.visitId == null);
+  for(const o of orphans){ o.visitId = visit.id; await putP(o); }
+
+  $("#start").classList.add("hide");
+  await refreshCount();
+  paintProj();
+  fetchWeather();
+  startCam();
+}
+
+async function backToStart(){
+  visit = null;
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; track = null; }
+  await loadState();
+  $("#start").classList.remove("hide");
+}
+
+$("#startBtn").onclick = async () => { enterCapture(await newVisit()); };
+$("#resumeBtn").onclick = async () => { if(pending) enterCapture(pending); };
+$("#startEdit").onclick = async () => {
+  /* editing before a visit exists: work on the pending one, or make it now */
+  if(!visit) visit = pending || await newVisit();
+  if(!pending) pending = visit;
+  openVisitInfo();
+};
+$("#finishBtn").onclick = e => { e.stopPropagation(); openGal(); };
+
 function paintProj(){
-  $("#projBtn").textContent = visit && visit.project
-    ? visit.project
-    : "SVR " + String(visit ? visit.num : 1).padStart(3,"0");
+  if(!visit) return;
+  const t = visit.started
+    ? new Date(visit.started).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})
+    : "";
+  $("#projBtn").textContent = "SVR " + String(visit.num).padStart(3,"0") + (t ? "  " + t : "");
 }
 
 /* weather, silent, best effort */
 function fetchWeather(){
-  if(!navigator.geolocation || visit.weather) return;
+  if(!visit || !navigator.geolocation || visit.weather) return;
   navigator.geolocation.getCurrentPosition(async pos => {
     try{
-      const { latitude:la, longitude:lo } = pos.coords;
+      const la = pos.coords.latitude, lo = pos.coords.longitude;
       const u = "https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo
               + "&current=temperature_2m,weather_code&temperature_unit=fahrenheit";
       const j = await (await fetch(u)).json();
-      const c = j.current;
-      visit.weather = wmo(c.weather_code);
-      visit.temp = Math.round(c.temperature_2m) + " F";
+      visit.weather = wmo(j.current.weather_code);
+      visit.temp = Math.round(j.current.temperature_2m) + " F";
       visit.lat = la; visit.lon = lo;
       await putV(visit);
     }catch(e){}
@@ -341,6 +438,7 @@ async function startCam(){
 }
 setInterval(() => {
   if(document.hidden) return;
+  if(!visit || !$("#start").classList.contains("hide")) return;
   if(document.querySelector(".sheet.open")) return;
   const v = $("#cam");
   const dead = !stream || !track || track.readyState !== "live" || v.paused || v.readyState < 2;
@@ -349,7 +447,7 @@ setInterval(() => {
 }, 1500);
 $("#stall").onclick = e => { e.stopPropagation(); startCam(); };
 document.addEventListener("visibilitychange", () => {
-  if(document.hidden) return;
+  if(document.hidden || !visit) return;
   $("#cam").play().catch(()=>{});
   if(!stream || !track || track.readyState !== "live") startCam();
 });
@@ -443,7 +541,6 @@ function setThumb(blob){
   t.classList.remove("empty");
 }
 function paintCount(){
-  $("#ct").textContent = count;
   const t = $("#thumb");
   let b = t.querySelector(".badge");
   if(!b){ b = document.createElement("span"); b.className="badge"; t.appendChild(b); }
@@ -487,8 +584,8 @@ $("#scrim").onclick = () => closeArea(true);
 $("#areaInput").addEventListener("keydown", e => { if(e.key === "Enter") closeArea(true); });
 
 /* ---------- visit info ---------- */
-$("#projBtn").onclick = e => {
-  e.stopPropagation();
+$("#projBtn").onclick = e => { e.stopPropagation(); openVisitInfo(); };
+function openVisitInfo(){
   $("#vProject").value = visit.project || "";
   $("#vNum").value = visit.projNum || "";
   $("#vAtt").value = visit.attendees || "";
@@ -498,7 +595,7 @@ $("#projBtn").onclick = e => {
   $("#vAuto").textContent = "Report SVR " + String(visit.num).padStart(3,"0")
     + ". Date and time on site are filled in from your photos.";
   $("#vis").classList.add("open");
-};
+}
 $("#visClose").onclick = () => $("#vis").classList.remove("open");
 $("#visSave").onclick = async () => {
   visit.project = $("#vProject").value.trim();
@@ -509,14 +606,12 @@ $("#visSave").onclick = async () => {
   visit.temp = $("#vTemp").value.trim();
   await putV(visit);
   paintProj();
+  await paintStart();
   $("#vis").classList.remove("open");
 };
 $("#vNew").onclick = async () => {
-  visit.exported = true; await putV(visit);
-  visit = await newVisit();
-  await refreshCount();
-  paintProj(); fetchWeather();
   $("#vis").classList.remove("open");
+  await backToStart();
 };
 
 /* ---------- gallery ---------- */
@@ -527,6 +622,7 @@ async function openGal(){
   const g = $("#grid"); g.innerHTML = "";
   $("#galEmpty").style.display = recs.length ? "none" : "block";
   $("#galTitle").textContent = "SVR " + String(visit.num).padStart(3,"0") + "   " + recs.length + " photos";
+  $("#galBuild").disabled = !recs.length;
   $("#galExport").disabled = !recs.length;
   recs.forEach((r,i)=>{
     const u = URL.createObjectURL(r.blob); urls.push(u);
@@ -542,32 +638,71 @@ async function openGal(){
 const fmt = ts => new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 $("#thumb").addEventListener("click", e => { e.stopPropagation(); openGal(); });
 $("#galClose").onclick = () => $("#gal").classList.remove("open");
+$("#galBack").onclick  = () => $("#gal").classList.remove("open");
+$("#galBuild").onclick = () => $("#galExport").click();
 
 /* ---------- export ---------- */
+let readyBlob = null, readyName = "";
+
 $("#galExport").onclick = async () => {
   const recs = await visitPhotos();
   if(!recs.length) return;
   $("#busyText").textContent = "Building report from " + recs.length + " photos";
   $("#busyWrap").classList.add("show");
   try{
-    const blob = await window.SVReport.buildReport(visit, recs);
-    const name = window.SVReport.reportFileName(visit);
-    const file = new File([blob], name,
-      { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    visit.exported = true; await putV(visit);
+    readyBlob = await window.SVReport.buildReport(visit, recs);
+    readyName = window.SVReport.reportFileName(visit);
     $("#busyWrap").classList.remove("show");
-    if(navigator.canShare && navigator.canShare({ files:[file] })){
-      await navigator.share({ files:[file], title:name });
-    }else{
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = name; a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
-    }
+    $("#doneName").textContent = readyName;
+    $("#doneNote").textContent = recs.length + " observations, "
+      + Math.round(readyBlob.size / 1024) + " KB";
+    $("#done").classList.add("open");
   }catch(err){
-    $("#busyText").textContent = "Export failed. " + (err && err.message ? err.message : "");
-    setTimeout(()=>$("#busyWrap").classList.remove("show"), 3000);
+    $("#busyText").textContent = "Could not build the report: "
+      + (err && err.message ? err.message : "unknown problem");
+    setTimeout(()=>$("#busyWrap").classList.remove("show"), 6000);
   }
 };
+
+/* the send happens on its own tap so iOS still counts it as a user action */
+$("#doneShare").onclick = async () => {
+  if(!readyBlob) return;
+  const file = new File([readyBlob], readyName,
+    { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  try{
+    if(navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title: readyName });
+      await markExported();
+    }else{
+      downloadReport();
+    }
+  }catch(err){
+    if(err && err.name === "AbortError") return;   /* he closed the share sheet */
+    $("#doneNote").textContent = "Share was refused, saving to Files instead.";
+    downloadReport();
+  }
+};
+$("#doneSave").onclick = () => downloadReport();
+function downloadReport(){
+  if(!readyBlob) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(readyBlob);
+  a.download = readyName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+  markExported();
+}
+async function markExported(){
+  if(!visit) return;
+  visit.exported = true;
+  await putV(visit);
+  $("#done").classList.remove("open");
+  $("#gal").classList.remove("open");
+  readyBlob = null;
+  await backToStart();
+}
+$("#doneClose").onclick = () => $("#done").classList.remove("open");
 
 /* ---------- detail ---------- */
 async function openDet(id, n){
@@ -631,10 +766,8 @@ $("#detDel").onclick = async () => {
 
 (async function init(){
   db = await openDB();
-  await loadVisit();
-  await refreshCount();
+  await loadState();
   paintArea();
-  startCam();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
 </script>
