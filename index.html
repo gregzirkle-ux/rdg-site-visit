@@ -154,6 +154,12 @@
     z-index:60;text-align:center;padding:30px;backdrop-filter:blur(3px)}
   .busywrap.show{display:grid}
   .busywrap div{font-size:15px}
+select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;color:var(--ink);border:1px solid #d5d1cb;border-radius:10px;margin-bottom:10px;min-height:46px}
+#itemsSheet{z-index:35}#itemEditor{z-index:36}.itemcard{background:white;border:1px solid #dedbd6;border-radius:12px;padding:16px;margin:12px 0}
+.itemcard h3{margin:0 0 8px;font-size:17px}.itemcard p{white-space:pre-wrap;margin:8px 0}.itemcard img{width:100%;max-height:220px;object-fit:contain;background:#eee;border-radius:8px}
+.itemcard .chips{margin-top:12px}.tools{margin-top:20px}.lbl{display:block}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}
+.primary{margin-top:10px}#det{z-index:24}.sheet .pad{padding-bottom:calc(30px + env(safe-area-inset-bottom))}
+#sState{margin-top:10px}#projectSelect{margin-bottom:0}.start .actions{margin-top:12px}
 </style>
 </head>
 <body>
@@ -198,7 +204,7 @@
     <div class="lbl">PROJECT</div>
     <input type="text" id="vProject" placeholder="Project name">
     <input type="text" id="vNum" placeholder="Project number">
-    <div class="lbl">PRESENT</div>
+    <div class="lbl">VISIT DATE</div><input type="date" id="vDate"><div class="lbl">PRESENT</div>
     <input type="text" id="vAtt" placeholder="Who you walked with">
     <div class="lbl">PREPARED BY</div>
     <input type="text" id="vBy" placeholder="Your name">
@@ -220,12 +226,12 @@
   <div class="grid" id="grid"></div>
   <div class="empty" id="galEmpty" style="display:none">No photos yet.</div>
   <div class="pad">
-    <button class="primary" id="galBuild">Build the report</button>
+    <button class="ghost" id="galItems">Review items</button><button class="primary" id="galBuild">Build the report</button>
     <button class="ghost" id="galBack">Keep shooting</button>
     <button class="ghost" id="galInfo">Visit info</button>
     <button class="ghost" id="galPause">Pause and go to Start</button>
     <button class="ghost" id="galToStart" style="display:none">Back to Start</button>
-    <button class="danger" id="galEnd">End this visit without a report</button>
+    <button class="danger" id="galEnd">Complete this visit</button>
   </div>
 </section>
 
@@ -241,7 +247,7 @@
     <div class="meta" id="detMeta"></div>
     <div class="lbl">NOTE</div>
     <textarea id="detNote" placeholder="Tap the microphone on your keyboard and talk."></textarea>
-    <div class="lbl">TAG</div>
+    <div class="lbl">LINK TO EXISTING ITEM</div><select id="detLink"></select><div class="lbl">TAG</div>
     <div class="chips" id="tagRow"></div>
     <div class="lbl">AREA</div>
     <input type="text" id="detArea" placeholder="Level 2, Exterior, Mech Room">
@@ -251,7 +257,7 @@
       <div class="lbl">OWNER</div>
       <input type="text" id="detOwner" placeholder="Who owns it">
       <div class="lbl">DUE</div>
-      <div class="chips" id="dueRow"></div>
+      <div class="chips" id="dueRow"></div><input type="date" id="detDue" aria-label="Due date">
     </div>
     <button class="danger" id="detDel">Delete this photo</button>
   </div>
@@ -269,19 +275,22 @@
     <div class="auto" id="doneNote" style="margin-top:8px"></div>
     <button class="primary" id="doneShare">Email or share</button>
     <button class="ghost" id="doneSave">Save to Files</button>
-    <button class="ghost" id="doneStart">Back to Start</button>
+    <button class="ghost" id="doneComplete">Complete this visit</button><button class="ghost" id="doneStart">Back to Start</button>
   </div>
 </section>
 
 <section class="start" id="start">
   <div class="brand">REDLINE DESIGN GROUP</div>
   <h1>Site Visit</h1>
-  <div class="state" id="sState"></div>
+  <label class="lbl" for="projectSelect">PROJECT</label>
+<select id="projectSelect"></select>
+<div><button class="btn" id="addProject">Add project</button> <button class="btn" id="editProject" style="margin-left:20px">Edit project</button></div>
+<div class="state" id="sState"></div>
   <div class="actions">
     <button class="primary" id="resumeBtn" style="display:none">Resume</button>
     <button class="primary" id="startBtn">Start new visit</button>
   </div>
-  <div class="fields">
+  <div class="fields" style="display:none">
     <div class="fieldnote" id="sFieldNote">CARRIES INTO THE NEXT REPORT</div>
     <div class="frow"><label for="sfProject">PROJECT</label>
       <input type="text" id="sfProject" placeholder="Project name" autocomplete="off" autocapitalize="words"></div>
@@ -296,11 +305,28 @@
     <div class="fieldnote" style="margin-top:0">PAST VISITS</div>
     <div id="pastList"></div>
   </div>
-  <div class="metaLines">
+  <div class="tools"><button class="ghost" id="backup">Back up all projects</button>
+<button class="ghost" id="restore">Restore backup</button><input hidden type="file" id="restoreFile" accept=".json,application/json">
+<button class="btn" id="checkUpdate">Check for update</button><div class="auto" id="updateNote"></div></div>
+<div class="metaLines">
     <span id="sNum">SVR 001</span><span id="sDate"></span><span id="sBuild"></span>
   </div>
 </section>
 
+<section class="sheet" id="itemsSheet">
+ <div class="sheethead"><button class="btn" id="itemsClose">Back</button><h2 id="itemsTitle">Visit items</h2></div>
+ <div class="pad"><p class="auto">Review here or continue to the camera. Untouched items remain open and print as not reviewed.</p>
+ <div id="itemsList"></div><button class="ghost" id="addItem">Add item without photo</button>
+ <button class="primary" id="itemsContinue" style="margin-top:16px">Continue to camera</button></div>
+</section>
+<section class="sheet" id="itemEditor">
+ <div class="sheethead"><button class="btn" id="itemCancel">Back</button><h2>Item details</h2><button class="btn right" id="itemSave">Save</button></div>
+ <div class="pad"><label class="lbl" for="itemNote">DESCRIPTION</label><textarea id="itemNote"></textarea>
+ <label class="lbl" for="itemOwner">OWNER</label><input type="text" id="itemOwner">
+ <label class="lbl" for="itemDue">DUE DATE</label><input type="date" id="itemDue">
+ <label class="lbl" for="itemArea">AREA</label><input type="text" id="itemArea">
+ <label class="lbl" for="itemUpdate">UPDATE FOR THIS VISIT</label><textarea id="itemUpdate"></textarea></div>
+</section>
 <div class="busywrap" id="busyWrap"><div>
   <div id="busyText">Building report</div>
   <button class="ghost" id="busyClose" style="display:none;margin-top:20px">Back</button>
@@ -308,691 +334,6 @@
 
 <script src="docx.umd.js"></script>
 <script src="report.js"></script>
-<script>
-const BUILD = "v8";
-const TAGS = ["Observation","Issue","Action","Safety"];
-const DUES = ["Next visit","One week","Two weeks"];
-const $ = s => document.querySelector(s);
-let db, stream, track, visit = null;
-let area = localStorage.getItem("area") || "";
-let recent = JSON.parse(localStorage.getItem("recentAreas") || "[]");
-let count = 0, busy = false, cur = null, lastId = null, undoTimer = null;
-let reviewing = false;   /* looking at a past visit, camera is off */
-let nativeZoom = null, zoom = 1, maxZoom = 5;
-
-/* ---------- storage ----------
-   photos holds the blob and is written once, at capture, and never again.
-   meta holds the note, tag, area and so on, keyed by the same id.
-   Rewriting a photo record to save a note is what emptied the blobs on iOS. */
-function openDB(){
-  return new Promise((res,rej)=>{
-    const r = indexedDB.open("rdg-sitevisit", 3);
-    r.onupgradeneeded = e => {
-      const idb = e.target.result;
-      if(!idb.objectStoreNames.contains("photos")){
-        const s = idb.createObjectStore("photos",{keyPath:"id",autoIncrement:true});
-        s.createIndex("ts","ts");
-      }
-      if(!idb.objectStoreNames.contains("visits")){
-        idb.createObjectStore("visits",{keyPath:"id",autoIncrement:true});
-      }
-      if(!idb.objectStoreNames.contains("meta")){
-        idb.createObjectStore("meta",{keyPath:"id"});
-      }
-    };
-    r.onsuccess = e => res(e.target.result);
-    r.onerror = () => rej(r.error);
-  });
-}
-const st = (n,m) => db.transaction(n,m).objectStore(n);
-const putP  = r  => new Promise(res=>{ const q=st("photos","readwrite").put(r); q.onsuccess=()=>res(q.result); });
-const allP  = () => new Promise(res=>{ const q=st("photos","readonly").getAll(); q.onsuccess=()=>res(q.result); });
-const oneP  = id => new Promise(res=>{ const q=st("photos","readonly").get(id); q.onsuccess=()=>res(q.result); });
-const dropP = id => new Promise(res=>{ const q=st("photos","readwrite").delete(id); q.onsuccess=()=>res(); });
-const putM  = r  => new Promise(res=>{ const q=st("meta","readwrite").put(r); q.onsuccess=()=>res(q.result); });
-const allM  = () => new Promise(res=>{ const q=st("meta","readonly").getAll(); q.onsuccess=()=>res(q.result); });
-const oneM  = id => new Promise(res=>{ const q=st("meta","readonly").get(id); q.onsuccess=()=>res(q.result); });
-const dropM = id => new Promise(res=>{ const q=st("meta","readwrite").delete(id); q.onsuccess=()=>res(); });
-const putV  = r  => new Promise(res=>{ const q=st("visits","readwrite").put(r); q.onsuccess=()=>res(q.result); });
-const allV  = () => new Promise(res=>{ const q=st("visits","readonly").getAll(); q.onsuccess=()=>res(q.result); });
-
-const NOTE_KEYS = ["note","tag","area","sheet","owner","due"];
-/* photos taken on an older build kept their notes on the photo record, so read those too */
-function joinMeta(pr, mr){
-  const out = { id: pr.id, visitId: pr.visitId, ts: pr.ts, blob: pr.blob };
-  NOTE_KEYS.forEach(k => {
-    out[k] = (mr && mr[k] != null && mr[k] !== "") ? mr[k] : (pr[k] || "");
-  });
-  return out;
-}
-async function photosFor(vid){
-  const [ps, ms] = await Promise.all([allP(), allM()]);
-  const byId = {}; ms.forEach(m => { byId[m.id] = m; });
-  return ps.filter(r => r.visitId === vid).sort((a,b)=>a.ts-b.ts).map(r => joinMeta(r, byId[r.id]));
-}
-async function countFor(vid){
-  return (await allP()).filter(r => r.visitId === vid).length;
-}
-
-async function visitPhotos(){
-  if(!visit) return [];
-  return photosFor(visit.id);
-}
-
-/* ---------- visit lifecycle: start, capture, finish ---------- */
-let pending = null;      /* an unfinished visit from a previous launch */
-let nextNum = 1;
-let allVisits = [];
-
-/* the four fields that carry from one visit to the next, editable on the start screen */
-const CARRY_KEYS = ["project","projNum","attendees","preparedBy"];
-let carry = { project:"", projNum:"", attendees:"", preparedBy:"" };
-const svr = n => "SVR " + String(n).padStart(3,"0");
-
-function saveCarry(){ localStorage.setItem("carry", JSON.stringify(carry)); }
-
-async function loadState(){
-  const vs = (await allV()).sort((a,b)=>a.id-b.id);
-  const last = vs[vs.length-1];
-  nextNum = last ? last.num + 1 : 1;
-  pending = vs.filter(v => !v.exported && !v.closed).pop() || null;
-  allVisits = vs;
-  if(pending) nextNum = pending.num;
-
-  /* first launch after this update: seed the fields from the visit already on the phone */
-  const stored = localStorage.getItem("carry");
-  if(stored){
-    try{ Object.assign(carry, JSON.parse(stored)); }catch(e){}
-  }else{
-    const src = pending || last;
-    if(src) CARRY_KEYS.forEach(k => { carry[k] = src[k] || ""; });
-    saveCarry();
-  }
-  await paintStart();
-}
-
-async function paintStart(){
-  $("#sfProject").value = carry.project || "";
-  $("#sfNum").value     = carry.projNum || "";
-  $("#sfAtt").value     = carry.attendees || "";
-  $("#sfBy").value      = carry.preparedBy || "";
-  $("#sDate").textContent = new Date().toLocaleDateString([], {month:"long", day:"numeric", year:"numeric"});
-  $("#sBuild").textContent = "Build " + BUILD;
-
-  if(pending){
-    const n = (await allP()).filter(r => r.visitId === pending.id).length;
-    const t = pending.started
-      ? new Date(pending.started).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}) : "";
-    const day = new Date(pending.started || pending.date).toLocaleDateString([], {month:"short", day:"numeric"});
-    $("#sState").innerHTML = "<b>" + svr(pending.num) + " is still open.</b> "
-      + n + (n === 1 ? " photo" : " photos") + ", started " + day + (t ? " at " + t : "") + ".";
-    $("#sNum").textContent = svr(pending.num) + " in progress";
-    $("#resumeBtn").style.display = "block";
-    $("#resumeBtn").className = "primary";
-    $("#resumeBtn").textContent = "Resume " + svr(pending.num)
-      + "  (" + n + (n === 1 ? " photo)" : " photos)");
-    $("#startBtn").className = "ghost";
-    $("#startBtn").textContent = "Start a new visit instead";
-    $("#sFieldNote").textContent = "APPLIES TO " + svr(pending.num);
-  }else{
-    $("#sState").innerHTML = "<b>Nothing open.</b> The next report will be "
-      + svr(nextNum) + ".";
-    $("#sNum").textContent = "Next " + svr(nextNum);
-    $("#resumeBtn").style.display = "none";
-    $("#startBtn").className = "primary";
-    $("#startBtn").textContent = "Start new visit";
-    $("#sFieldNote").textContent = "CARRIES INTO THE NEXT REPORT";
-  }
-  await paintPast();
-}
-
-/* Past visits stay in the app. Open one to read it, add notes, or build and send
-   the report again. iOS does not let a web app read your Files folder, so this
-   list is the way back into anything you have already shot. */
-async function paintPast(){
-  const past = allVisits.filter(v => !pending || v.id !== pending.id)
-                        .sort((a,b) => b.id - a.id).slice(0, 8);
-  const wrap = $("#pastWrap"), list = $("#pastList");
-  list.innerHTML = "";
-  if(!past.length){ wrap.style.display = "none"; return; }
-  wrap.style.display = "block";
-  const ps = await allP();
-  past.forEach(v => {
-    const n = ps.filter(r => r.visitId === v.id).length;
-    const b = document.createElement("button");
-    b.className = "prow";
-    b.innerHTML = '<span class="pn">' + svr(v.num) + '</span>'
-      + '<span class="pd">' + new Date(v.date).toLocaleDateString([], {month:"short", day:"numeric"})
-      + "   " + n + (n === 1 ? " photo" : " photos")
-      + (v.project ? "   " + v.project : "") + '</span>'
-      + '<span class="po">Open</span>';
-    b.onclick = () => openPast(v);
-    list.appendChild(b);
-  });
-}
-
-async function openPast(v){
-  visit = v;
-  reviewing = true;
-  $("#start").classList.add("hide");
-  await openGal();
-}
-
-/* edit in place: typing saves to the carry, and to the open visit when there is one */
-async function commitFields(){
-  carry.project    = $("#sfProject").value.trim();
-  carry.projNum    = $("#sfNum").value.trim();
-  carry.attendees  = $("#sfAtt").value.trim();
-  carry.preparedBy = $("#sfBy").value.trim();
-  saveCarry();
-  if(pending){
-    CARRY_KEYS.forEach(k => { pending[k] = carry[k]; });
-    await putV(pending);
-    if(visit && visit.id === pending.id) CARRY_KEYS.forEach(k => { visit[k] = carry[k]; });
-  }
-}
-["#sfProject","#sfNum","#sfAtt","#sfBy"].forEach(sel => {
-  const el = document.querySelector(sel);
-  el.addEventListener("change", commitFields);
-  el.addEventListener("blur", commitFields);
-  el.addEventListener("keydown", e => { if(e.key === "Enter") el.blur(); });
-});
-async function lastVisit(){
-  const vs = (await allV()).sort((a,b)=>a.id-b.id);
-  return vs[vs.length-1] || null;
-}
-
-async function newVisit(){
-  const last = await lastVisit();
-  const v = {
-    num: last ? last.num + 1 : 1,
-    date: Date.now(),
-    started: Date.now(),
-    project:    carry.project,
-    projNum:    carry.projNum,
-    attendees:  carry.attendees,
-    preparedBy: carry.preparedBy,
-    weather: "", temp: "", exported: false
-  };
-  v.id = await putV(v);
-  return v;
-}
-
-async function enterCapture(v){
-  visit = v;
-  reviewing = false;
-  if(!visit.started){ visit.started = Date.now(); await putV(visit); }
-
-  $("#start").classList.add("hide");
-  await refreshCount();
-  paintProj();
-  fetchWeather();
-  startCam();
-}
-
-async function backToStart(){
-  visit = null;
-  reviewing = false;
-  readyBlob = null;
-  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; track = null; }
-  ["#gal","#det","#vis","#done"].forEach(id => $(id).classList.remove("open"));
-  $("#busyWrap").classList.remove("show");
-  $("#areaSheet").classList.remove("open"); $("#scrim").classList.remove("open");
-  await loadState();
-  $("#start").classList.remove("hide");
-}
-
-$("#startBtn").onclick = async () => {
-  await commitFields();
-  if(pending){
-    const n = (await allP()).filter(r => r.visitId === pending.id).length;
-    const ok = confirm(svr(pending.num) + " is still open with " + n
-      + (n === 1 ? " photo" : " photos") + ". Leave it and start a new visit?");
-    if(!ok) return;
-  }
-  enterCapture(await newVisit());
-};
-$("#resumeBtn").onclick = async () => {
-  await commitFields();
-  if(pending) enterCapture(pending);
-};
-$("#finishBtn").onclick = e => { e.stopPropagation(); openGal(); };
-$("#pauseBtn").onclick = async e => { e.stopPropagation(); await backToStart(); };
-
-function paintProj(){
-  if(!visit) return;
-  $("#projBtn").textContent = svr(visit.num);
-}
-
-/* weather, silent, best effort */
-function fetchWeather(){
-  if(!visit || !navigator.geolocation || visit.weather) return;
-  navigator.geolocation.getCurrentPosition(async pos => {
-    try{
-      const la = pos.coords.latitude, lo = pos.coords.longitude;
-      const u = "https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo
-              + "&current=temperature_2m,weather_code&temperature_unit=fahrenheit";
-      const j = await (await fetch(u)).json();
-      visit.weather = wmo(j.current.weather_code);
-      visit.temp = Math.round(j.current.temperature_2m) + " F";
-      visit.lat = la; visit.lon = lo;
-      await putV(visit);
-    }catch(e){}
-  }, () => {}, { timeout: 8000, maximumAge: 900000 });
-}
-function wmo(c){
-  const m = {0:"Clear",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Fog",
-    51:"Light drizzle",53:"Drizzle",55:"Heavy drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",
-    71:"Light snow",73:"Snow",75:"Heavy snow",80:"Rain showers",81:"Rain showers",82:"Heavy showers",
-    95:"Thunderstorm",96:"Thunderstorm",99:"Thunderstorm"};
-  return m[c] || "";
-}
-
-/* ---------- camera ---------- */
-async function startCam(){
-  try{
-    if(stream) stream.getTracks().forEach(t=>t.stop());
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:"environment"}, width:{ideal:2560}, height:{ideal:1440} }, audio:false });
-    track = stream.getVideoTracks()[0];
-    const v = $("#cam");
-    v.srcObject = stream;
-    await v.play().catch(()=>{});
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    nativeZoom = (caps.zoom && caps.zoom.max > caps.zoom.min) ? caps.zoom : null;
-    maxZoom = nativeZoom ? Math.min(caps.zoom.max, 8) : 5;
-    zoom = 1; buildZoomRow(); applyZoom();
-    $("#stall").classList.remove("show");
-  }catch(err){
-    $("#stall").textContent = "Camera blocked. Tap to try again.";
-    $("#stall").classList.add("show");
-  }
-}
-setInterval(() => {
-  if(document.hidden) return;
-  if(!visit || reviewing || !$("#start").classList.contains("hide")) return;
-  if(document.querySelector(".sheet.open")) return;
-  const v = $("#cam");
-  const dead = !stream || !track || track.readyState !== "live" || v.paused || v.readyState < 2;
-  if(dead){ v.play().catch(()=>{}); $("#stall").textContent = "Camera stalled. Tap to restart."; $("#stall").classList.add("show"); }
-  else $("#stall").classList.remove("show");
-}, 1500);
-$("#stall").onclick = e => { e.stopPropagation(); startCam(); };
-document.addEventListener("visibilitychange", () => {
-  if(document.hidden || !visit || reviewing) return;
-  $("#cam").play().catch(()=>{});
-  if(!stream || !track || track.readyState !== "live") startCam();
-});
-
-/* ---------- zoom ---------- */
-function applyZoom(){
-  zoom = Math.max(1, Math.min(maxZoom, zoom));
-  if(nativeZoom && track){
-    const span = nativeZoom.max - nativeZoom.min;
-    const val = nativeZoom.min + span * (zoom - 1) / Math.max(0.001, maxZoom - 1);
-    track.applyConstraints({ advanced:[{ zoom: val }] }).catch(()=>{});
-    $("#cam").style.transform = "scale(1)";
-  } else {
-    $("#cam").style.transform = "scale(" + zoom + ")";
-  }
-  document.querySelectorAll(".zchip").forEach(c =>
-    c.classList.toggle("on", Math.abs(parseFloat(c.dataset.z) - zoom) < 0.06));
-}
-function buildZoomRow(){
-  const row = $("#zoomRow"); row.innerHTML = "";
-  [1,2,3].filter(z => z <= maxZoom).forEach(z => {
-    const b = document.createElement("button");
-    b.className = "zchip"; b.dataset.z = z; b.textContent = z + "x";
-    b.onclick = e => { e.stopPropagation(); zoom = z; applyZoom(); };
-    row.appendChild(b);
-  });
-}
-let pinchStart = 0, zoomStart = 1;
-const wrap = $("#camwrap");
-const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-wrap.addEventListener("touchstart", e => { if(e.touches.length===2){ pinchStart=dist(e.touches); zoomStart=zoom; } }, {passive:true});
-wrap.addEventListener("touchmove",  e => { if(e.touches.length===2 && pinchStart){ zoom = zoomStart*(dist(e.touches)/pinchStart); applyZoom(); } }, {passive:true});
-wrap.addEventListener("touchend",   () => { pinchStart = 0; }, {passive:true});
-
-/* ---------- capture ---------- */
-const canvas = document.createElement("canvas");
-const ctx = canvas.getContext("2d");
-const MAX = 1600;
-function shoot(){
-  const v = $("#cam");
-  if(busy || !v.videoWidth || !visit || reviewing) return;
-  if($("#areaSheet").classList.contains("open")) return;
-  busy = true;
-  $("#shutter").classList.add("busy");
-  $("#flash").classList.add("on");
-  requestAnimationFrame(()=>$("#flash").classList.remove("on"));
-
-  const ts = Date.now();
-  const crop = nativeZoom ? 1 : zoom;
-  const sw = v.videoWidth / crop, sh = v.videoHeight / crop;
-  const sx = (v.videoWidth - sw) / 2, sy = (v.videoHeight - sh) / 2;
-  const scale = Math.min(1, MAX / Math.max(sw, sh));
-  canvas.width = Math.round(sw * scale);
-  canvas.height = Math.round(sh * scale);
-  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-
-  count++; paintCount();
-  canvas.toBlob(async blob => {
-    lastId = await putP({ visitId: visit.id, ts, blob });
-    await putM({ id: lastId, note:"", tag:"", area, sheet:"", owner:"", due:"" });
-    setThumb(blob); showUndo();
-    busy = false; $("#shutter").classList.remove("busy");
-  }, "image/jpeg", 0.7);
-}
-wrap.addEventListener("click", e => { if(e.target.id === "cam" || e.target.id === "camwrap") shoot(); });
-$("#shutter").addEventListener("click", e => { e.stopPropagation(); shoot(); });
-
-function showUndo(){
-  const u = $("#undo"); u.classList.add("show");
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(()=>u.classList.remove("show"), 6000);
-}
-$("#undo").onclick = async e => {
-  e.stopPropagation();
-  if(lastId == null) return;
-  await dropP(lastId); await dropM(lastId); lastId = null;
-  await refreshCount();
-  $("#undo").classList.remove("show");
-};
-async function refreshCount(){
-  const recs = await visitPhotos();
-  count = recs.length; paintCount();
-  if(recs.length) setThumb(recs[recs.length-1].blob);
-  else { $("#thumb").style.backgroundImage=""; $("#thumb").classList.add("empty"); }
-}
-let thumbUrl = null;
-function setThumb(blob){
-  if(thumbUrl) URL.revokeObjectURL(thumbUrl);
-  thumbUrl = URL.createObjectURL(blob);
-  const t = $("#thumb");
-  t.style.backgroundImage = "url(" + thumbUrl + ")";
-  t.classList.remove("empty");
-}
-function paintCount(){
-  const t = $("#thumb");
-  let b = t.querySelector(".badge");
-  if(!b){ b = document.createElement("span"); b.className="badge"; t.appendChild(b); }
-  b.textContent = count; b.style.display = count ? "grid" : "none";
-}
-
-/* ---------- area ---------- */
-function openArea(){
-  $("#areaInput").value = area; drawRecent();
-  $("#areaSheet").classList.add("open"); $("#scrim").classList.add("open");
-  setTimeout(()=>$("#areaInput").focus(), 260);
-}
-function closeArea(save){
-  if(save){
-    area = $("#areaInput").value.trim();
-    localStorage.setItem("area", area);
-    if(area && recent.indexOf(area) === -1){
-      recent.unshift(area); recent = recent.slice(0,8);
-      localStorage.setItem("recentAreas", JSON.stringify(recent));
-    }
-    paintArea();
-  }
-  $("#areaInput").blur();
-  $("#areaSheet").classList.remove("open"); $("#scrim").classList.remove("open");
-  $("#cam").play().catch(()=>{});
-}
-function drawRecent(){
-  const r = $("#areaRecent"); r.innerHTML = "";
-  recent.forEach(a => {
-    const b = document.createElement("button");
-    b.className = "tag" + (a === area ? " on" : "");
-    b.textContent = a;
-    b.onclick = () => { $("#areaInput").value = a; closeArea(true); };
-    r.appendChild(b);
-  });
-}
-function paintArea(){ $("#areaBtn").textContent = area || "Set area"; }
-$("#areaBtn").onclick = e => { e.stopPropagation(); openArea(); };
-$("#areaDone").onclick = () => closeArea(true);
-$("#scrim").onclick = () => closeArea(true);
-$("#areaInput").addEventListener("keydown", e => { if(e.key === "Enter") closeArea(true); });
-
-/* ---------- visit info ---------- */
-$("#projBtn").onclick = e => { e.stopPropagation(); openVisitInfo(); };
-function openVisitInfo(){
-  if(!visit) return;
-  $("#vProject").value = visit.project || "";
-  $("#vNum").value = visit.projNum || "";
-  $("#vAtt").value = visit.attendees || "";
-  $("#vBy").value = visit.preparedBy || "";
-  $("#vWx").value = visit.weather || "";
-  $("#vTemp").value = visit.temp || "";
-  $("#vAuto").textContent = "Report SVR " + String(visit.num).padStart(3,"0")
-    + ". Date and time on site are filled in from your photos.";
-  $("#vis").classList.add("open");
-}
-$("#visClose").onclick = () => $("#vis").classList.remove("open");
-$("#visSave").onclick = async () => {
-  visit.project = $("#vProject").value.trim();
-  visit.projNum = $("#vNum").value.trim();
-  visit.attendees = $("#vAtt").value.trim();
-  visit.preparedBy = $("#vBy").value.trim();
-  visit.weather = $("#vWx").value.trim();
-  visit.temp = $("#vTemp").value.trim();
-  await putV(visit);
-  CARRY_KEYS.forEach(k => { carry[k] = visit[k] || ""; });
-  saveCarry();
-  paintProj();
-  await paintStart();
-  $("#vis").classList.remove("open");
-};
-$("#vPause").onclick = async () => {
-  $("#vis").classList.remove("open");
-  await backToStart();
-};
-
-/* ---------- gallery ---------- */
-let urls = [];
-async function openGal(){
-  const recs = await visitPhotos();
-  urls.forEach(URL.revokeObjectURL); urls = [];
-  const g = $("#grid"); g.innerHTML = "";
-  $("#galEmpty").style.display = recs.length ? "none" : "block";
-  $("#galTitle").textContent = svr(visit.num) + "   " + recs.length
-    + (recs.length === 1 ? " photo" : " photos");
-  $("#galClose").textContent = reviewing ? "Start" : "Camera";
-  $("#galBack").style.display  = reviewing ? "none" : "block";
-  $("#galPause").style.display = reviewing ? "none" : "block";
-  $("#galEnd").style.display   = reviewing ? "none" : "block";
-  $("#galToStart").style.display = reviewing ? "block" : "none";
-  $("#galBuild").disabled = !recs.length;
-  $("#galExport").disabled = !recs.length;
-  recs.forEach((r,i)=>{
-    const u = URL.createObjectURL(r.blob); urls.push(u);
-    const c = document.createElement("button");
-    c.className = "cell" + (r.note || r.tag ? " noted" : "");
-    c.style.backgroundImage = "url(" + u + ")";
-    c.innerHTML = '<span class="n">' + String(i+1).padStart(3,"0") + '</span><span class="t">' + fmt(r.ts) + '</span>';
-    c.onclick = () => openDet(r.id, i+1);
-    g.appendChild(c);
-  });
-  $("#gal").classList.add("open");
-}
-const fmt = ts => new Date(ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
-$("#thumb").addEventListener("click", e => { e.stopPropagation(); openGal(); });
-$("#galClose").onclick = async () => {
-  if(reviewing){ await backToStart(); return; }
-  $("#gal").classList.remove("open");
-};
-$("#galBack").onclick  = () => $("#gal").classList.remove("open");
-$("#galBuild").onclick = () => $("#galExport").click();
-$("#galInfo").onclick  = () => openVisitInfo();
-$("#galPause").onclick = async () => { await backToStart(); };
-$("#galToStart").onclick = async () => { await backToStart(); };
-$("#galEnd").onclick = async () => {
-  const n = await countFor(visit.id);
-  const ok = confirm("Close " + svr(visit.num) + " without building a report? "
-    + "The " + n + (n === 1 ? " photo stays" : " photos stay") + " in the app under Past visits.");
-  if(!ok) return;
-  visit.closed = true;
-  await putV(visit);
-  await backToStart();
-};
-
-/* ---------- export ---------- */
-let readyBlob = null, readyName = "";
-
-function busyFail(msg){
-  $("#busyText").textContent = msg;
-  $("#busyClose").style.display = "block";
-}
-$("#busyClose").onclick = () => {
-  $("#busyWrap").classList.remove("show");
-  $("#busyClose").style.display = "none";
-};
-
-$("#galExport").onclick = async () => {
-  const recs = await visitPhotos();
-  if(!recs.length) return;
-  $("#busyClose").style.display = "none";
-  $("#busyText").textContent = "Building report from " + recs.length
-    + (recs.length === 1 ? " photo" : " photos");
-  $("#busyWrap").classList.add("show");
-  try{
-    /* an unreadable photo used to surface as a vague Safari error halfway through */
-    const bad = recs.filter(r => !r.blob || !r.blob.size);
-    if(bad.length){
-      throw new Error(bad.length + (bad.length === 1 ? " photo is" : " photos are")
-        + " unreadable. Close the app fully, reopen it, and build again.");
-    }
-    readyBlob = await window.SVReport.buildReport(visit, recs);
-    readyName = window.SVReport.reportFileName(visit);
-    $("#busyWrap").classList.remove("show");
-    $("#doneName").textContent = readyName;
-    $("#doneNote").textContent = recs.length
-      + (recs.length === 1 ? " observation, " : " observations, ")
-      + Math.round(readyBlob.size / 1024) + " KB";
-    $("#done").classList.add("open");
-  }catch(err){
-    busyFail("Could not build the report. "
-      + (err && err.message ? err.message : "Unknown problem.")
-      + " Nothing was lost, your photos are still here.");
-  }
-};
-
-/* the send happens on its own tap so iOS still counts it as a user action */
-$("#doneShare").onclick = async () => {
-  if(!readyBlob) return;
-  const file = new File([readyBlob], readyName,
-    { type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-  try{
-    if(navigator.canShare && navigator.canShare({ files:[file] })){
-      await navigator.share({ files:[file], title: readyName });
-      await markExported();
-    }else{
-      downloadReport();
-    }
-  }catch(err){
-    if(err && err.name === "AbortError") return;   /* he closed the share sheet */
-    $("#doneNote").textContent = "Share was refused, saving to Files instead.";
-    downloadReport();
-  }
-};
-$("#doneSave").onclick = () => downloadReport();
-function downloadReport(){
-  if(!readyBlob) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(readyBlob);
-  a.download = readyName;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 5000);
-  markExported();
-}
-async function markExported(){
-  if(!visit) return;
-  visit.exported = true;
-  await putV(visit);
-  $("#done").classList.remove("open");
-  $("#gal").classList.remove("open");
-  readyBlob = null;
-  await backToStart();
-}
-$("#doneClose").onclick = () => $("#done").classList.remove("open");
-$("#doneStart").onclick = async () => { await backToStart(); };
-
-/* ---------- detail ---------- */
-async function openDet(id, n){
-  const pr = await oneP(id);
-  cur = joinMeta(pr, await oneM(id));
-  $("#detTitle").textContent = "Observation " + String(n).padStart(3,"0");
-  $("#detImg").src = URL.createObjectURL(cur.blob);
-  $("#detMeta").textContent = new Date(cur.ts).toLocaleString([], {
-    weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
-  $("#detNote").value = cur.note || "";
-  $("#detArea").value = cur.area || "";
-  $("#detSheet").value = cur.sheet || "";
-  $("#detOwner").value = cur.owner || "";
-  drawTags(cur.tag); drawDue(cur.due);
-  $("#det").classList.add("open");
-}
-function drawTags(active){
-  const row = $("#tagRow"); row.innerHTML = "";
-  TAGS.forEach(t=>{
-    const b = document.createElement("button");
-    b.className = "tag" + (t === active ? " on" : "");
-    b.textContent = t;
-    b.onclick = () => { cur.tag = (cur.tag === t ? "" : t); drawTags(cur.tag); };
-    row.appendChild(b);
-  });
-  $("#actionBits").style.display = (active === "Issue" || active === "Action") ? "block" : "none";
-}
-function drawDue(active){
-  const row = $("#dueRow"); row.innerHTML = "";
-  DUES.forEach(d=>{
-    const b = document.createElement("button");
-    b.className = "tag" + (d === active ? " on" : "");
-    b.textContent = d;
-    b.onclick = () => { cur.due = (cur.due === d ? "" : d); drawDue(cur.due); };
-    row.appendChild(b);
-  });
-}
-$("#detClose").onclick = () => $("#det").classList.remove("open");
-$("#detSave").onclick = async () => {
-  const m = {
-    id: cur.id,
-    note:  $("#detNote").value.trim(),
-    tag:   cur.tag || "",
-    area:  $("#detArea").value.trim(),
-    sheet: $("#detSheet").value.trim(),
-    owner: $("#detOwner").value.trim(),
-    due:   cur.due || ""
-  };
-  if(m.area){
-    area = m.area; localStorage.setItem("area", area);
-    if(recent.indexOf(area) === -1){
-      recent.unshift(area); recent = recent.slice(0,8);
-      localStorage.setItem("recentAreas", JSON.stringify(recent));
-    }
-    paintArea();
-  }
-  await putM(m);          /* the photo record is not touched, so the blob cannot be lost */
-  $("#det").classList.remove("open");
-  openGal();
-};
-$("#detDel").onclick = async () => {
-  await dropP(cur.id);
-  await dropM(cur.id);
-  await refreshCount();
-  $("#det").classList.remove("open");
-  openGal();
-};
-
-(async function init(){
-  db = await openDB();
-  await loadState();
-  paintArea();
-  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
-})();
-</script>
+<script src="app.js"></script>
 </body>
 </html>

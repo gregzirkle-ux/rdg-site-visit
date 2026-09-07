@@ -142,7 +142,7 @@ function headerTable(visit, times) {
     ["Project No.",  visit.projNum || ""],
     ["Report No.",   "SVR " + String(visit.num).padStart(3, "0")],
     ["Date",         new Date(visit.date).toLocaleDateString([], { weekday:"long", year:"numeric", month:"long", day:"numeric" })],
-    ["Time On Site", times],
+    ["Photo Time Range", times],
     ["Weather",      [visit.weather, visit.temp].filter(Boolean).join(", ")],
     ["Present",      visit.attendees || ""],
     ["Prepared By",  visit.preparedBy || ""]
@@ -181,6 +181,7 @@ async function observationTable(recs) {
     const loc = [r.area, r.sheet].filter(Boolean).join("   |   ");
     if (loc) right.push(p(loc, { size: 17, color: GREY, caps: true }));
 
+    if (r.itemRef) right.push(p("Tracked item: " + r.itemRef, { size: 18, bold: true }));
     if (r.note) {
       right.push(p(r.note, { size: 20, after: 120 }));
     } else {
@@ -228,7 +229,7 @@ function openItemsTable(items) {
   const line = { style: "single", size: 4, color: "C9C4BD" };
   const b = { top: line, bottom: line, left: line, right: line, insideHorizontal: line, insideVertical: line };
   const head = ["Item", "Description", "First Noted", "Owner", "Due", "Status"];
-  const widths = [800, 4600, 1250, 1450, 1100, 880];   /* sums to TW_PAGE */
+  const widths = [900, 3450, 1450, 1450, 1200, 1630];   /* sums to TW_PAGE */
 
   const rows = [ new TableRow({ tableHeader: true, children: head.map((h, i) =>
     new TableCell({ width: { size: widths[i], type: WidthType.DXA }, borders: b,
@@ -237,12 +238,12 @@ function openItemsTable(items) {
 
   items.forEach((it, i) => {
     const cells = [
-      String(i + 1).padStart(3, "0"),
-      it.note || "(no description)",
-      new Date(it.ts).toLocaleDateString(),
+      it.ref,
+      (it.note || "Photo item with no description") + (it.area ? "\nArea: " + it.area : "") + (it.update ? "\nThis visit: " + it.update : ""),
+      "SVR " + String(it.firstVisitNum).padStart(3,"0") + "\n" + new Date(it.firstNoted).toLocaleDateString(),
       it.owner || "",
       it.due || "",
-      "Open"
+      it.status === "Not reviewed" ? "Open; not reviewed this visit" : it.status
     ];
     rows.push(new TableRow({ children: cells.map((c, j) =>
       new TableCell({ width: { size: widths[j], type: WidthType.DXA }, borders: b,
@@ -272,8 +273,9 @@ async function buildReport(visit, recs) {
       new Date(sorted[sorted.length - 1].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })
     : "";
 
-  const items = sorted.filter(r => r.tag === "Issue" || r.tag === "Action");
+  const items = visit.legacyReportItems || visit.items || [];
 
+  for (const r of sorted) { const item = items.find(it => it.photoId === r.id || (it.followupPhotoIds || []).includes(r.id)); if (item) r.itemRef = item.ref; }
   const logo = await logoBits();
 
   const body = [
@@ -282,12 +284,12 @@ async function buildReport(visit, recs) {
     headerTable(visit, times),
     p("", { after: 200 }),
     p("OBSERVATIONS", { bold: true, size: 20, color: GREY, caps: true, after: 160 }),
-    await observationTable(sorted)
+    ...(sorted.length ? [await observationTable(sorted)] : [p("No photographs recorded during this visit.")])
   ];
 
   if (items.length) {
     body.push(p("", { after: 240 }));
-    body.push(p("OPEN ITEMS", { bold: true, size: 20, color: GREY, caps: true, after: 160 }));
+    body.push(p("ITEM STATUS", { bold: true, size: 20, color: GREY, caps: true, after: 160 }));
     body.push(openItemsTable(items));
   }
 
@@ -300,7 +302,7 @@ async function buildReport(visit, recs) {
   const doc = new Document({
     styles: { default: { document: { run: { font: "Calibri", size: 20 } } } },
     sections: [{
-      properties: { page: { margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 } } },
+      properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 } } },
       footers: { default: new Footer({ children: [ new Paragraph({
         alignment: AlignmentType.RIGHT,
         children: [ new TextRun({ children: ["Page ", PageNumber.CURRENT, " of ", PageNumber.TOTAL_PAGES],
