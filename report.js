@@ -3,7 +3,7 @@
 
 const D = () => window.docx;
 
-const TW_PAGE  = 9360;   /* usable width in twips on letter with 1in margins */
+const TW_PAGE  = 10080;  /* usable width in twips: letter 12240 less the 0.75in margins */
 const TW_PHOTO = 4100;
 const TW_TEXT  = TW_PAGE - TW_PHOTO;
 const PHOTO_PX = 264;    /* 2.75in at 96dpi */
@@ -31,12 +31,19 @@ function p(text, opts = {}) {
   });
 }
 
+/* Word and LibreOffice merge consecutive paragraphs that carry an identical border
+   into one box, which collapsed four writing lines into a single rule. Nudging the
+   colour by one step per line keeps them separate and is invisible on paper. */
 function ruledLines(n) {
-  const { Paragraph } = D();
-  const line = { style: "single", size: 4, color: "C9C4BD" };
+  const { Paragraph, TextRun } = D();
+  const shades = ["C9C4BD", "C9C4BE", "C9C4BF", "C9C4C0", "C9C4C1", "C9C4C2"];
   const out = [];
   for (let i = 0; i < n; i++) {
-    out.push(new Paragraph({ spacing: { after: 200 }, border: { bottom: line }, children: [] }));
+    out.push(new Paragraph({
+      spacing: { after: 230 },
+      border: { bottom: { style: "single", size: 4, color: shades[i % shades.length] } },
+      children: [ new TextRun({ text: " ", size: 20, font: "Calibri" }) ]
+    }));
   }
   return out;
 }
@@ -78,12 +85,54 @@ async function logoBits() {
     const blob = await r.blob();
     if (!blob || blob.size < 100) return null;
     const buf = await blob.arrayBuffer();
-    const W = 200;
-    let ratio = 0.28;
+    /* the mark is a tall stacked lockup, so drive it off height, not width.
+       96px at 96dpi is 1in, which matches how it prints on the letterhead. */
+    const H = 96;
+    let ratio = 1.36;
     const d = await measure(blob);
-    if (d && d.w) ratio = d.h / d.w;
-    return { buf, w: W, h: Math.round(W * ratio) };
+    if (d && d.h && d.w) ratio = d.h / d.w;
+    return { buf, w: Math.round(H / ratio), h: H };
   } catch (e) { return null; }
+}
+
+const ADDRESS = "925 Tuckaseegee Road, Suite 110, Charlotte, NC 28208     704.377.2990     redlinedg.com";
+
+/* title on the left, the Redline mark on the right, the way the letterhead sits */
+function mastheadTable(logo) {
+  const { Table, TableRow, TableCell, WidthType, Paragraph, ImageRun,
+          AlignmentType, VerticalAlign } = D();
+  const RIGHT = 1500;
+
+  const left = [
+    p("SITE VISIT REPORT", { bold: true, size: 32, after: 60 }),
+    p(ADDRESS, { size: 15, color: GREY, after: 0 })
+  ];
+  const right = logo
+    ? [ new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 0 }, children: [
+          new ImageRun({ data: logo.buf, transformation: { width: logo.w, height: logo.h } }) ] }) ]
+    : [ p("REDLINE", { bold: true, size: 24, color: RED, align: AlignmentType.RIGHT, after: 0 }),
+        p("DESIGN GROUP", { bold: true, size: 15, color: RED, align: AlignmentType.RIGHT, after: 0 }) ];
+
+  return new Table({
+    width: { size: TW_PAGE, type: WidthType.DXA },
+    columnWidths: [TW_PAGE - RIGHT, RIGHT],
+    borders: noBorders,
+    rows: [ new TableRow({ children: [
+      new TableCell({ width: { size: TW_PAGE - RIGHT, type: WidthType.DXA }, borders: noBorders,
+        margins: { top: 0, bottom: 0 }, verticalAlign: VerticalAlign.BOTTOM, children: left }),
+      new TableCell({ width: { size: RIGHT, type: WidthType.DXA }, borders: noBorders,
+        margins: { top: 0, bottom: 0 }, verticalAlign: VerticalAlign.TOP, children: right })
+    ]}) ]
+  });
+}
+
+function redRule(after) {
+  const { Paragraph } = D();
+  return new Paragraph({
+    spacing: { before: 90, after: after == null ? 220 : after },
+    border: { bottom: { style: "single", size: 10, color: RED } },
+    children: []
+  });
 }
 
 function headerTable(visit, times) {
@@ -98,13 +147,15 @@ function headerTable(visit, times) {
     ["Present",      visit.attendees || ""],
     ["Prepared By",  visit.preparedBy || ""]
   ];
+  const KEY = 1900;
   return new Table({
     width: { size: TW_PAGE, type: WidthType.DXA },
+    columnWidths: [KEY, TW_PAGE - KEY],
     borders: noBorders,
     rows: rows.map(([k, v]) => new TableRow({ children: [
-      new TableCell({ width: { size: 2000, type: WidthType.DXA }, borders: noBorders,
+      new TableCell({ width: { size: KEY, type: WidthType.DXA }, borders: noBorders,
         margins: { top: 30, bottom: 30 }, children: [ p(k, { bold: true, size: 18, color: GREY, caps: true }) ] }),
-      new TableCell({ width: { size: TW_PAGE - 2000, type: WidthType.DXA }, borders: noBorders,
+      new TableCell({ width: { size: TW_PAGE - KEY, type: WidthType.DXA }, borders: noBorders,
         margins: { top: 30, bottom: 30 }, children: [ p(v, { size: 20 }) ] })
     ]}))
   });
@@ -168,7 +219,8 @@ async function observationTable(recs) {
     }));
   }
 
-  return new Table({ width: { size: TW_PAGE, type: WidthType.DXA }, borders: noBorders, rows });
+  return new Table({ width: { size: TW_PAGE, type: WidthType.DXA },
+    columnWidths: [TW_PHOTO, TW_TEXT], borders: noBorders, rows });
 }
 
 function openItemsTable(items) {
@@ -176,7 +228,7 @@ function openItemsTable(items) {
   const line = { style: "single", size: 4, color: "C9C4BD" };
   const b = { top: line, bottom: line, left: line, right: line, insideHorizontal: line, insideVertical: line };
   const head = ["Item", "Description", "First Noted", "Owner", "Due", "Status"];
-  const widths = [900, 4000, 1200, 1400, 1000, 860];
+  const widths = [800, 4600, 1250, 1450, 1100, 880];   /* sums to TW_PAGE */
 
   const rows = [ new TableRow({ tableHeader: true, children: head.map((h, i) =>
     new TableCell({ width: { size: widths[i], type: WidthType.DXA }, borders: b,
@@ -198,7 +250,8 @@ function openItemsTable(items) {
         children: [ p(c, { size: 18 }) ] })) }));
   });
 
-  return new Table({ width: { size: TW_PAGE, type: WidthType.DXA }, borders: b, rows });
+  return new Table({ width: { size: TW_PAGE, type: WidthType.DXA },
+    columnWidths: widths, borders: b, rows });
 }
 
 const LIMITATIONS =
@@ -222,18 +275,10 @@ async function buildReport(visit, recs) {
   const items = sorted.filter(r => r.tag === "Issue" || r.tag === "Action");
 
   const logo = await logoBits();
-  const masthead = logo
-    ? [ new Paragraph({ spacing: { after: 60 }, children: [
-          new ImageRun({ data: logo.buf, transformation: { width: logo.w, height: logo.h } }) ] }),
-        p("925 Tuckaseegee Road, Suite 110, Charlotte, NC 28208   |   704.377.2990",
-          { size: 15, color: GREY, after: 240 }) ]
-    : [ p("REDLINE DESIGN GROUP", { bold: true, size: 24, color: RED, after: 0 }),
-        p("925 Tuckaseegee Road, Suite 110, Charlotte, NC 28208   |   704.377.2990",
-          { size: 15, color: GREY, after: 240 }) ];
 
   const body = [
-    ...masthead,
-    p("SITE VISIT REPORT", { bold: true, size: 30, after: 200 }),
+    mastheadTable(logo),
+    redRule(),
     headerTable(visit, times),
     p("", { after: 200 }),
     p("OBSERVATIONS", { bold: true, size: 20, color: GREY, caps: true, after: 160 }),

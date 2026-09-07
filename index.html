@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Site Visit">
 <meta name="theme-color" content="#a12b2a">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>RDG Site Visit</title>
 <style>
   :root{ --red:#a12b2a; --ink:#101010; --paper:#f6f5f3; --line:rgba(255,255,255,.28); }
@@ -117,15 +117,29 @@
   .scrim.open{opacity:1;pointer-events:auto}
 
   .start{position:fixed;inset:0;background:var(--paper);color:var(--ink);z-index:30;
-    display:flex;flex-direction:column;justify-content:center;
-    padding:28px calc(28px + env(safe-area-inset-left)) calc(28px + env(safe-area-inset-bottom))}
+    display:flex;flex-direction:column;justify-content:flex-start;overflow-y:auto;
+    -webkit-overflow-scrolling:touch;touch-action:auto;
+    padding:calc(env(safe-area-inset-top) + 30px) calc(26px + env(safe-area-inset-left))
+            calc(34px + env(safe-area-inset-bottom))}
   .start.hide{display:none}
   .start .brand{font-size:12px;font-weight:700;letter-spacing:1.4px;color:var(--red)}
-  .start h1{margin:6px 0 22px;font-size:34px;font-weight:700;letter-spacing:-.5px}
-  .start .line{display:flex;justify-content:space-between;padding:11px 0;
-    border-bottom:1px solid #e2dfda;font-size:15px}
-  .start .line span:first-child{color:#7a736c}
-  .start .actions{margin-top:26px}
+  .start h1{margin:6px 0 14px;font-size:34px;font-weight:700;letter-spacing:-.5px}
+  .state{font-size:14.5px;color:#6b6560;line-height:1.4;min-height:20px}
+  .state b{font-weight:650;color:var(--ink)}
+  .start .actions{margin-top:20px}
+  .fields{margin-top:30px;border-top:1px solid #e2dfda}
+  .fieldnote{font-size:11.5px;font-weight:700;letter-spacing:.9px;color:#a39c95;margin:0 0 8px}
+  .frow{display:flex;align-items:center;gap:10px;border-bottom:1px solid #e2dfda}
+  .frow label{flex:0 0 96px;font-size:11.5px;font-weight:700;letter-spacing:.9px;color:#7a736c}
+  .frow input[type=text]{flex:1;min-width:0;border:0;background:none;margin:0;
+    padding:14px 0;font:inherit;font-size:15px;color:var(--ink);border-radius:0}
+  .frow input[type=text]::placeholder{color:#b8b1aa}
+  .frow input[type=text]:focus{outline:none}
+  .frow:focus-within{background:#fff;box-shadow:inset 3px 0 0 var(--red)}
+  .frow:focus-within label{color:var(--red);padding-left:9px}
+  .frow:focus-within input[type=text]{padding-right:9px}
+  .metaLines{margin-top:22px;display:flex;flex-wrap:wrap;gap:4px 16px;
+    font-size:12.5px;color:#a39c95;font-variant-numeric:tabular-nums}
   .busywrap{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;place-items:center;
     z-index:60;text-align:center;padding:30px;backdrop-filter:blur(3px)}
   .busywrap.show{display:grid}
@@ -246,14 +260,24 @@
 <section class="start" id="start">
   <div class="brand">REDLINE DESIGN GROUP</div>
   <h1>Site Visit</h1>
-  <div class="line"><span>Project</span><span id="sProject">Not set</span></div>
-  <div class="line"><span>Report</span><span id="sNum">SVR 001</span></div>
-  <div class="line"><span>Date</span><span id="sDate"></span></div>
-  <div class="line"><span>Build</span><span id="sBuild"></span></div>
+  <div class="state" id="sState"></div>
   <div class="actions">
-    <button class="primary" id="startBtn">Start visit</button>
-    <button class="ghost" id="resumeBtn" style="display:none">Resume</button>
-    <button class="ghost" id="startEdit">Edit visit info</button>
+    <button class="primary" id="resumeBtn" style="display:none">Resume</button>
+    <button class="primary" id="startBtn">Start new visit</button>
+  </div>
+  <div class="fields">
+    <div class="fieldnote" id="sFieldNote">CARRIES INTO THE NEXT REPORT</div>
+    <div class="frow"><label for="sfProject">PROJECT</label>
+      <input type="text" id="sfProject" placeholder="Project name" autocomplete="off" autocapitalize="words"></div>
+    <div class="frow"><label for="sfNum">NUMBER</label>
+      <input type="text" id="sfNum" placeholder="Project number" autocomplete="off"></div>
+    <div class="frow"><label for="sfAtt">PRESENT</label>
+      <input type="text" id="sfAtt" placeholder="Who you walked with" autocomplete="off" autocapitalize="words"></div>
+    <div class="frow"><label for="sfBy">PREPARED BY</label>
+      <input type="text" id="sfBy" placeholder="Your name" autocomplete="off" autocapitalize="words"></div>
+  </div>
+  <div class="metaLines">
+    <span id="sNum">SVR 001</span><span id="sDate"></span><span id="sBuild"></span>
   </div>
 </section>
 
@@ -262,7 +286,7 @@
 <script src="docx.umd.js"></script>
 <script src="report.js"></script>
 <script>
-const BUILD = "v6";
+const BUILD = "v7";
 const TAGS = ["Observation","Issue","Action","Safety"];
 const DUES = ["Next visit","One week","Two weeks"];
 const $ = s => document.querySelector(s);
@@ -308,32 +332,85 @@ async function visitPhotos(){
 let pending = null;      /* an unfinished visit from a previous launch */
 let nextNum = 1;
 
+/* the four fields that carry from one visit to the next, editable on the start screen */
+const CARRY_KEYS = ["project","projNum","attendees","preparedBy"];
+let carry = { project:"", projNum:"", attendees:"", preparedBy:"" };
+const svr = n => "SVR " + String(n).padStart(3,"0");
+
+function saveCarry(){ localStorage.setItem("carry", JSON.stringify(carry)); }
+
 async function loadState(){
   const vs = (await allV()).sort((a,b)=>a.id-b.id);
   const last = vs[vs.length-1];
   nextNum = last ? last.num + 1 : 1;
   pending = vs.filter(v => !v.exported).pop() || null;
   if(pending) nextNum = pending.num;
+
+  /* first launch after this update: seed the fields from the visit already on the phone */
+  const stored = localStorage.getItem("carry");
+  if(stored){
+    try{ Object.assign(carry, JSON.parse(stored)); }catch(e){}
+  }else{
+    const src = pending || last;
+    if(src) CARRY_KEYS.forEach(k => { carry[k] = src[k] || ""; });
+    saveCarry();
+  }
   await paintStart();
 }
 
 async function paintStart(){
-  const src = pending || (await lastVisit());
-  $("#sProject").textContent = (src && src.project) ? src.project : "Not set";
-  $("#sNum").textContent = "SVR " + String(nextNum).padStart(3,"0");
+  $("#sfProject").value = carry.project || "";
+  $("#sfNum").value     = carry.projNum || "";
+  $("#sfAtt").value     = carry.attendees || "";
+  $("#sfBy").value      = carry.preparedBy || "";
   $("#sDate").textContent = new Date().toLocaleDateString([], {month:"long", day:"numeric", year:"numeric"});
-  $("#sBuild").textContent = BUILD;
+  $("#sBuild").textContent = "Build " + BUILD;
+
   if(pending){
     const n = (await allP()).filter(r => r.visitId === pending.id).length;
+    const t = pending.started
+      ? new Date(pending.started).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}) : "";
+    const day = new Date(pending.started || pending.date).toLocaleDateString([], {month:"short", day:"numeric"});
+    $("#sState").innerHTML = "<b>" + svr(pending.num) + " is still open.</b> "
+      + n + (n === 1 ? " photo" : " photos") + ", started " + day + (t ? " at " + t : "") + ".";
+    $("#sNum").textContent = svr(pending.num) + " in progress";
     $("#resumeBtn").style.display = "block";
-    $("#resumeBtn").textContent = "Resume SVR " + String(pending.num).padStart(3,"0")
-      + " (" + n + (n === 1 ? " photo)" : " photos)");
-    $("#startBtn").textContent = "Start a different visit";
+    $("#resumeBtn").className = "primary";
+    $("#resumeBtn").textContent = "Resume " + svr(pending.num)
+      + "  (" + n + (n === 1 ? " photo)" : " photos)");
+    $("#startBtn").className = "ghost";
+    $("#startBtn").textContent = "Start a new visit instead";
+    $("#sFieldNote").textContent = "APPLIES TO " + svr(pending.num);
   }else{
+    $("#sState").innerHTML = "<b>Nothing open.</b> The next report will be "
+      + svr(nextNum) + ".";
+    $("#sNum").textContent = "Next " + svr(nextNum);
     $("#resumeBtn").style.display = "none";
-    $("#startBtn").textContent = "Start visit";
+    $("#startBtn").className = "primary";
+    $("#startBtn").textContent = "Start new visit";
+    $("#sFieldNote").textContent = "CARRIES INTO THE NEXT REPORT";
   }
 }
+
+/* edit in place: typing saves to the carry, and to the open visit when there is one */
+async function commitFields(){
+  carry.project    = $("#sfProject").value.trim();
+  carry.projNum    = $("#sfNum").value.trim();
+  carry.attendees  = $("#sfAtt").value.trim();
+  carry.preparedBy = $("#sfBy").value.trim();
+  saveCarry();
+  if(pending){
+    CARRY_KEYS.forEach(k => { pending[k] = carry[k]; });
+    await putV(pending);
+    if(visit && visit.id === pending.id) CARRY_KEYS.forEach(k => { visit[k] = carry[k]; });
+  }
+}
+["#sfProject","#sfNum","#sfAtt","#sfBy"].forEach(sel => {
+  const el = document.querySelector(sel);
+  el.addEventListener("change", commitFields);
+  el.addEventListener("blur", commitFields);
+  el.addEventListener("keydown", e => { if(e.key === "Enter") el.blur(); });
+});
 async function lastVisit(){
   const vs = (await allV()).sort((a,b)=>a.id-b.id);
   return vs[vs.length-1] || null;
@@ -345,10 +422,10 @@ async function newVisit(){
     num: last ? last.num + 1 : 1,
     date: Date.now(),
     started: Date.now(),
-    project:   last ? last.project   : "",
-    projNum:   last ? last.projNum   : "",
-    attendees: last ? last.attendees : "",
-    preparedBy:last ? last.preparedBy: "",
+    project:    carry.project,
+    projNum:    carry.projNum,
+    attendees:  carry.attendees,
+    preparedBy: carry.preparedBy,
     weather: "", temp: "", exported: false
   };
   v.id = await putV(v);
@@ -377,13 +454,19 @@ async function backToStart(){
   $("#start").classList.remove("hide");
 }
 
-$("#startBtn").onclick = async () => { enterCapture(await newVisit()); };
-$("#resumeBtn").onclick = async () => { if(pending) enterCapture(pending); };
-$("#startEdit").onclick = async () => {
-  /* editing before a visit exists: work on the pending one, or make it now */
-  if(!visit) visit = pending || await newVisit();
-  if(!pending) pending = visit;
-  openVisitInfo();
+$("#startBtn").onclick = async () => {
+  await commitFields();
+  if(pending){
+    const n = (await allP()).filter(r => r.visitId === pending.id).length;
+    const ok = confirm(svr(pending.num) + " is still open with " + n
+      + (n === 1 ? " photo" : " photos") + ". Leave it and start a new visit?");
+    if(!ok) return;
+  }
+  enterCapture(await newVisit());
+};
+$("#resumeBtn").onclick = async () => {
+  await commitFields();
+  if(pending) enterCapture(pending);
 };
 $("#finishBtn").onclick = e => { e.stopPropagation(); openGal(); };
 
@@ -608,6 +691,8 @@ $("#visSave").onclick = async () => {
   visit.weather = $("#vWx").value.trim();
   visit.temp = $("#vTemp").value.trim();
   await putV(visit);
+  CARRY_KEYS.forEach(k => { carry[k] = visit[k] || ""; });
+  saveCarry();
   paintProj();
   await paintStart();
   $("#vis").classList.remove("open");

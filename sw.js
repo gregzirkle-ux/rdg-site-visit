@@ -1,11 +1,11 @@
-const CACHE = "rdg-sv-6";
+const CACHE = "rdg-sv-7";
 const FILES = ["./index.html","./report.js","./docx.umd.js","./logo.png",
-               "./manifest.json","./icon-192.png","./icon-512.png"];
+               "./manifest.json","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => Promise.allSettled(FILES.map(f => c.add(f))))   // a missing logo must not fail the install
+      .then(c => Promise.allSettled(FILES.map(f => c.add(f))))   // a missing file must not fail the install
       .then(() => self.skipWaiting())
   );
 });
