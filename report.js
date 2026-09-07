@@ -167,7 +167,7 @@ async function observationTable(recs) {
 
   for (let i = 0; i < recs.length; i++) {
     const r = recs[i];
-    const n = String(i + 1).padStart(3, "0");
+    const n = String(r.observationNumber || i + 1).padStart(3, "0");
     let img;
     try {
       img = await imageBits(r.blob);
@@ -179,11 +179,11 @@ async function observationTable(recs) {
                       { bold: true, size: 20, color: RED }) ];
 
     const loc = [r.area, r.sheet].filter(Boolean).join("   |   ");
-    if (loc) right.push(p(loc, { size: 17, color: GREY, caps: true }));
+    if (loc) right.push(p(loc, { size: 17, color: r.tag === "Safety" ? RED : GREY, bold: r.tag === "Safety", caps: true }));
 
     if (r.itemRef) right.push(p("Tracked item: " + r.itemRef, { size: 18, bold: true }));
     if (r.note) {
-      right.push(p(r.note, { size: 20, after: 120 }));
+      right.push(p(r.note, { size: 20, after: 120, bold: r.tag === "Safety", color: r.tag === "Safety" ? RED : "101010" }));
     } else {
       right.push(p("", { after: 40 }));
       ruledLines(4).forEach(l => right.push(l));
@@ -191,7 +191,7 @@ async function observationTable(recs) {
 
     if (r.owner || r.due) {
       right.push(p([r.owner ? "Owner: " + r.owner : "", r.due ? "Due: " + r.due : ""]
-                   .filter(Boolean).join("     "), { size: 18, bold: true, color: GREY }));
+                   .filter(Boolean).join("     "), { size: 18, bold: true, color: r.tag === "Safety" ? RED : GREY }));
     }
 
     rows.push(new TableRow({
@@ -248,7 +248,8 @@ function openItemsTable(items) {
     rows.push(new TableRow({ children: cells.map((c, j) =>
       new TableCell({ width: { size: widths[j], type: WidthType.DXA }, borders: b,
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
-        children: [ p(c, { size: 18 }) ] })) }));
+        shading: it.tag === "Safety" ? { fill: "FFF1F0" } : undefined,
+        children: [ p(c, { size: 18, bold: it.tag === "Safety", color: it.tag === "Safety" ? RED : "101010" }) ] })) }));
   });
 
   return new Table({ width: { size: TW_PAGE, type: WidthType.DXA },
@@ -267,7 +268,7 @@ const LIMITATIONS =
 async function buildReport(visit, recs) {
   const { Document, Packer, Paragraph, TextRun, ImageRun, Footer, PageNumber, AlignmentType } = D();
 
-  const sorted = recs.slice().sort((a, b) => a.ts - b.ts);
+  const sorted = recs.map(r => ({...r})).sort((a, b) => a.ts - b.ts);
   const times = sorted.length
     ? new Date(sorted[0].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) + " to " +
       new Date(sorted[sorted.length - 1].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })
@@ -276,21 +277,31 @@ async function buildReport(visit, recs) {
   const items = visit.legacyReportItems || visit.items || [];
 
   for (const r of sorted) { const item = items.find(it => it.photoId === r.id || (it.followupPhotoIds || []).includes(r.id)); if (item) r.itemRef = item.ref; }
+  sorted.forEach((r,i) => r.observationNumber = i + 1);
+  const safetyPhotos = sorted.filter(r => r.tag === "Safety");
+  const safetyItems = items.filter(it => it.tag === "Safety" || safetyPhotos.some(r => r.id === it.photoId));
+  const otherItems = items.filter(it => !safetyItems.includes(it));
+  const otherPhotos = sorted.filter(r => r.tag !== "Safety");
   const logo = await logoBits();
 
   const body = [
     mastheadTable(logo),
     redRule(),
     headerTable(visit, times),
-    p("", { after: 200 }),
-    p("OBSERVATIONS", { bold: true, size: 20, color: GREY, caps: true, after: 160 }),
-    ...(sorted.length ? [await observationTable(sorted)] : [p("No photographs recorded during this visit.")])
+    p("", { after: 200 })
   ];
-
-  if (items.length) {
-    body.push(p("", { after: 240 }));
-    body.push(p("ITEM STATUS", { bold: true, size: 20, color: GREY, caps: true, after: 160 }));
-    body.push(openItemsTable(items));
+  if (safetyPhotos.length || safetyItems.length) {
+    body.push(p("SAFETY ITEMS — PRIORITY REVIEW", {bold:true, color:RED, size:28, after:160}));
+    if (safetyItems.length) body.push(openItemsTable(safetyItems.map(it => ({...it,tag:"Safety"}))));
+    if (safetyPhotos.length) body.push(await observationTable(safetyPhotos));
+    body.push(redRule());
+  }
+  body.push(p("OBSERVATIONS", {bold:true,size:20,color:GREY,after:160}));
+  if (otherPhotos.length) body.push(await observationTable(otherPhotos));
+  else body.push(p(sorted.length ? "All photographs are listed in the safety section above." : "No photographs recorded during this visit."));
+  if (otherItems.length) {
+    body.push(p("ITEM STATUS", {bold:true,size:20,color:GREY,before:240,after:160}));
+    body.push(openItemsTable(otherItems));
   }
 
   body.push(p("", { after: 300 }));

@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v9';
+const BUILD='v10';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId'];
@@ -96,7 +96,8 @@ async function paintStart(){
  const select=$('#projectSelect');select.replaceChildren();
  if(!projects.length)select.add(new Option('Add your first project',''));
  projects.forEach(p=>select.add(new Option(p.name+(p.number?' · '+p.number:''),p.id)));
- select.value=selectedProject||'';
+ select.value=selectedProject==null?'':String(selectedProject);
+ $('#selectedProjectName').textContent=currentProject()?.name||'No project selected';
  const pv=allVisits.filter(v=>v.projectId===selectedProject),nextNum=Math.max(0,...pv.map(v=>v.num))+1;
  $('#sDate').textContent=new Date().toLocaleDateString();$('#sBuild').textContent='Build '+BUILD;
  $('#sState').textContent=pending?svr(pending.num)+' is in progress.':projects.length?'Next visit: '+svr(nextNum):'Create a project to start your first visit.';
@@ -330,28 +331,27 @@ async function openDet(id,n){const pr=await oneP(id);cur=joinMeta(pr,await oneM(
  $('#detTitle').textContent='Observation '+String(n).padStart(3,'0');$('#detMeta').textContent=new Date(cur.ts).toLocaleString();
  for(const [id,key] of [['detNote','note'],['detArea','area'],['detSheet','sheet'],['detOwner','owner']]){$('#'+id).value=cur[key]||'';$('#'+id).disabled=!!visit.closed;}
  const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;cur.area=item.area;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;$('#detArea').value=cur.area;}cur.original=JSON.stringify([cur.note,cur.area,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId]);
- const sel=$('#detLink');sel.replaceChildren(new Option('No existing item',''));visit.items.forEach(i=>sel.add(new Option(i.ref+' · '+(i.note||'Photo item'),i.id)));sel.value=cur.itemId;sel.disabled=!!visit.closed||!!visit.items.find(i=>i.photoId===cur.id);
  $('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';$('#detDue').disabled=!!visit.closed;
  drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=!!visit.closed;$('#detDel').hidden=!!visit.closed;$('#det').classList.add('open');}
-function drawTags(active){$('#tagRow').replaceChildren();TAGS.forEach(t=>{const b=document.createElement('button');b.className='tag'+(t===active?' on':'');b.textContent=t;b.disabled=!!visit.closed;b.onclick=()=>{cur.tag=cur.tag===t?'':t;drawTags(cur.tag);};$('#tagRow').append(b);});$('#actionBits').style.display=(active==='Issue'||active==='Action')?'block':'none';}
-function drawDue(active){$('#dueRow').replaceChildren();['Next visit','One week','Two weeks','Clear'].forEach(d=>{const b=document.createElement('button');b.className='tag'+(d===active?' on':'');b.textContent=d;b.disabled=!!visit.closed;b.onclick=()=>{cur.due=d==='Clear'?'':dueValue(d,visit.date);$('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';drawDue(cur.due);};$('#dueRow').append(b);});}
+function drawTags(active){$('#tagRow').replaceChildren();TAGS.forEach(t=>{const b=document.createElement('button');b.className='tag'+(t===active?' on':'');b.textContent=t;b.disabled=!!visit.closed;b.onclick=()=>{cur.tag=cur.tag===t?'':t;drawTags(cur.tag);};$('#tagRow').append(b);});$('#actionBits').style.display=(['Issue','Action','Safety'].includes(active))?'block':'none';}
+function drawDue(active){$('#dueRow').replaceChildren();['Next visit','One week','Two weeks','Clear'].forEach(d=>{const b=document.createElement('button');b.className='tag'+((d==='Clear'?!active:dueValue(d,visit.date)===active)?' on':'');b.textContent=d;b.disabled=!!visit.closed;b.onclick=()=>{cur.due=d==='Clear'?'':dueValue(d,visit.date);$('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';drawDue(cur.due);};$('#dueRow').append(b);});}
 $('#detDue').onchange=()=>{cur.due=$('#detDue').value;drawDue(cur.due);};
-on('#detClose',()=>{const current=JSON.stringify([$('#detNote').value,$('#detArea').value,$('#detSheet').value,$('#detOwner').value,cur.tag,cur.due,$('#detLink').value]);if(!visit.closed&&current!==cur.original&&!confirm('Leave without saving these changes?'))return;$('#det').classList.remove('open');});
-on('#detSave',async()=>{editable();const next=clone(visit),m={id:cur.id,note:$('#detNote').value.trim(),tag:cur.tag||'',area:$('#detArea').value.trim(),sheet:$('#detSheet').value.trim(),owner:$('#detOwner').value.trim(),due:cur.due||'',itemId:$('#detLink').value};
+on('#detClose',()=>{const current=JSON.stringify([$('#detNote').value,$('#detArea').value,$('#detSheet').value,$('#detOwner').value,cur.tag,cur.due,cur.itemId||'']);if(!visit.closed&&current!==cur.original&&!confirm('Leave without saving these changes?'))return;$('#det').classList.remove('open');});
+on('#detSave',async()=>{editable();const next=clone(visit),m={id:cur.id,note:$('#detNote').value.trim(),tag:cur.tag||'',area:$('#detArea').value.trim(),sheet:$('#detSheet').value.trim(),owner:$('#detOwner').value.trim(),due:cur.due||'',itemId:cur.itemId||''};
  const origin=next.items.find(i=>i.photoId===cur.id);
- if(origin&&!['Issue','Action'].includes(m.tag))throw new Error('This photo has a tracked item. Keep its Issue or Action tag and close the item from Review items when resolved.');
+ if(origin&&!['Issue','Action','Safety'].includes(m.tag))throw new Error('This photo has a tracked item. Keep its Issue, Action or Safety tag and close the item from Review items when resolved.');
  next.items.forEach(i=>i.followupPhotoIds=(i.followupPhotoIds||[]).filter(id=>id!==cur.id));
  let item=origin||next.items.find(i=>i.id===m.itemId);
- if(!item&&['Issue','Action'].includes(m.tag)){item=newItem(next,{photoId:cur.id,firstNoted:cur.ts});next.items.push(item);}
- if(item){m.itemId=item.id;if(item.photoId===cur.id){Object.assign(item,{note:m.note,owner:m.owner,due:m.due,area:m.area});}else if(!item.followupPhotoIds.includes(cur.id))item.followupPhotoIds.push(cur.id);}
+ if(!item&&['Issue','Action','Safety'].includes(m.tag)){item=newItem(next,{photoId:cur.id,firstNoted:cur.ts});next.items.push(item);}
+ if(item){m.itemId=item.id;if(item.photoId===cur.id){Object.assign(item,{note:m.note,owner:m.owner,due:m.due,area:m.area,tag:m.tag});}else if(!item.followupPhotoIds.includes(cur.id))item.followupPhotoIds.push(cur.id);}
  await transaction(['meta','visits'],'readwrite',tx=>{tx.objectStore('meta').put(m);tx.objectStore('visits').put(next);});visit=next;readyBlob=null;
  if(m.area){area=m.area;recent=[area,...recent.filter(a=>a!==area)].slice(0,8);saveAreas();paintArea();}$('#det').classList.remove('open');await openGal();});
 on('#detDel',async()=>{if(!confirm('Delete this photo? This cannot be undone.'))return;await deletePhoto(cur.id);await refreshCount();$('#det').classList.remove('open');await openGal();});
 /* Items are copied into each visit. Completed visits never read later statuses. */
 async function openItems(fromStart){await captureTask;itemsFromStart=fromStart;await paintItems();$('#itemsSheet').classList.add('open');}
 async function paintItems(){itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];$('#itemsTitle').textContent=svr(visit.num)+' items';$('#itemsList').replaceChildren();$('#addItem').hidden=!!visit.closed;$('#itemsContinue').textContent=itemsFromStart?'Continue to camera':'Back to report';
- if(!visit.items.length){const p=document.createElement('p');p.textContent='No tracked items yet. Tag a photo Issue or Action, or add an item below.';$('#itemsList').append(p);}
- for(const item of visit.items){const card=document.createElement('article');card.className='itemcard';const title=document.createElement('h3');title.textContent=item.ref+' · '+item.status;card.append(title);
+ if(!visit.items.length){const p=document.createElement('p');p.textContent='No tracked items yet. Tag a photo Issue, Action or Safety, or add an item below.';$('#itemsList').append(p);}
+ for(const item of [...visit.items].sort((a,b)=>Number(b.tag==='Safety')-Number(a.tag==='Safety'))){const card=document.createElement('article');card.className='itemcard'+(item.tag==='Safety'?' safety':'');const title=document.createElement('h3');title.textContent=(item.tag==='Safety'?'SAFETY · ':'')+item.ref+' · '+item.status;card.append(title);
  if(item.photoId){const pr=await oneP(item.photoId);if(pr?.blob){const im=document.createElement('img');im.alt='Original photo for item '+item.ref;im.src=URL.createObjectURL(pr.blob);itemUrls.push(im.src);card.append(im);}}
  for(const txt of [item.note||'Photo item with no description',item.area,[item.owner?'Owner: '+item.owner:'',item.due?'Due: '+item.due:''].filter(Boolean).join(' · '),'First noted '+svr(item.firstVisitNum)+' · '+new Date(item.firstNoted).toLocaleDateString(),item.update?'This visit: '+item.update:''])if(txt){const p=document.createElement('p');p.textContent=txt;card.append(p);}
  const chips=document.createElement('div');chips.className='chips';if(!visit.closed){for(const status of ['Still open','Closed']){const b=document.createElement('button');b.className='tag'+(item.status===status?' on':'');b.textContent=status;b.onclick=safe(async()=>{const next=clone(visit),it=next.items.find(i=>i.id===item.id);it.status=status;it.closedAt=status==='Closed'?Date.now():null;await persistVisit(next);await paintItems();});chips.append(b);}const edit=document.createElement('button');edit.className='btn';edit.textContent='Details / update';edit.onclick=()=>openItemEditor(item.id);chips.append(edit);}card.append(chips);$('#itemsList').append(card);}

@@ -160,6 +160,10 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
 .itemcard .chips{margin-top:12px}.tools{margin-top:20px}.lbl{display:block}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}
 .primary{margin-top:10px}#det{z-index:24}.sheet .pad{padding-bottom:calc(30px + env(safe-area-inset-bottom))}
 #sState{margin-top:10px}#projectSelect{margin-bottom:0}.start .actions{margin-top:12px}
+#projectSelect{display:block;flex:none;height:54px;min-height:54px;appearance:auto;-webkit-appearance:menulist;color:#101010;-webkit-text-fill-color:#101010;background-color:#fff;line-height:normal;white-space:nowrap}
+#projectSelect option{color:#101010;background:#fff}
+.start>*{flex-shrink:0}#selectedProjectName{font-weight:700;margin:8px 0;overflow-wrap:anywhere}
+.itemcard.safety{border:2px solid var(--red);background:#fff1f0}.itemcard.safety h3,.itemcard.safety p{color:var(--red);font-weight:700}
 </style>
 </head>
 <body>
@@ -247,7 +251,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
     <div class="meta" id="detMeta"></div>
     <div class="lbl">NOTE</div>
     <textarea id="detNote" placeholder="Tap the microphone on your keyboard and talk."></textarea>
-    <div class="lbl">LINK TO EXISTING ITEM</div><select id="detLink"></select><div class="lbl">TAG</div>
+    <div class="lbl">TAG</div>
     <div class="chips" id="tagRow"></div>
     <div class="lbl">AREA</div>
     <input type="text" id="detArea" placeholder="Level 2, Exterior, Mech Room">
@@ -257,7 +261,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
       <div class="lbl">OWNER</div>
       <input type="text" id="detOwner" placeholder="Who owns it">
       <div class="lbl">DUE</div>
-      <div class="chips" id="dueRow"></div><input type="date" id="detDue" aria-label="Due date">
+      <div class="chips" id="dueRow"></div><label class="lbl" for="detDue">SELECT DATE</label><input type="date" id="detDue" aria-label="Select due date">
     </div>
     <button class="danger" id="detDel">Delete this photo</button>
   </div>
@@ -283,7 +287,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
   <div class="brand">REDLINE DESIGN GROUP</div>
   <h1>Site Visit</h1>
   <label class="lbl" for="projectSelect">PROJECT</label>
-<select id="projectSelect"></select>
+<select id="projectSelect" aria-label="Select project"></select><div id="selectedProjectName" aria-live="polite"></div>
 <div><button class="btn" id="addProject">Add project</button> <button class="btn" id="editProject" style="margin-left:20px">Edit project</button></div>
 <div class="state" id="sState"></div>
   <div class="actions">
@@ -323,7 +327,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
  <div class="sheethead"><button class="btn" id="itemCancel">Back</button><h2>Item details</h2><button class="btn right" id="itemSave">Save</button></div>
  <div class="pad"><label class="lbl" for="itemNote">DESCRIPTION</label><textarea id="itemNote"></textarea>
  <label class="lbl" for="itemOwner">OWNER</label><input type="text" id="itemOwner">
- <label class="lbl" for="itemDue">DUE DATE</label><input type="date" id="itemDue">
+ <label class="lbl" for="itemDue">SELECT DATE (DUE DATE)</label><input type="date" id="itemDue">
  <label class="lbl" for="itemArea">AREA</label><input type="text" id="itemArea">
  <label class="lbl" for="itemUpdate">UPDATE FOR THIS VISIT</label><textarea id="itemUpdate"></textarea></div>
 </section>
