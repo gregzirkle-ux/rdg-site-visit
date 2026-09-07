@@ -249,6 +249,7 @@
   <div class="line"><span>Project</span><span id="sProject">Not set</span></div>
   <div class="line"><span>Report</span><span id="sNum">SVR 001</span></div>
   <div class="line"><span>Date</span><span id="sDate"></span></div>
+  <div class="line"><span>Build</span><span id="sBuild"></span></div>
   <div class="actions">
     <button class="primary" id="startBtn">Start visit</button>
     <button class="ghost" id="resumeBtn" style="display:none">Resume</button>
@@ -261,6 +262,7 @@
 <script src="docx.umd.js"></script>
 <script src="report.js"></script>
 <script>
+const BUILD = "v6";
 const TAGS = ["Observation","Issue","Action","Safety"];
 const DUES = ["Next visit","One week","Two weeks"];
 const $ = s => document.querySelector(s);
@@ -320,6 +322,7 @@ async function paintStart(){
   $("#sProject").textContent = (src && src.project) ? src.project : "Not set";
   $("#sNum").textContent = "SVR " + String(nextNum).padStart(3,"0");
   $("#sDate").textContent = new Date().toLocaleDateString([], {month:"long", day:"numeric", year:"numeric"});
+  $("#sBuild").textContent = BUILD;
   if(pending){
     const n = (await allP()).filter(r => r.visitId === pending.id).length;
     $("#resumeBtn").style.display = "block";

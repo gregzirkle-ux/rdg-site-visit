@@ -70,6 +70,22 @@ async function imageBits(blob) {
   return { buf, w: PHOTO_PX, h: Math.round(PHOTO_PX * ratio) };
 }
 
+/* Uses logo.png from the app folder if it is there, otherwise falls back to type. */
+async function logoBits() {
+  try {
+    const r = await fetch("logo.png", { cache: "no-cache" });
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    if (!blob || blob.size < 100) return null;
+    const buf = await blob.arrayBuffer();
+    const W = 200;
+    let ratio = 0.28;
+    const d = await measure(blob);
+    if (d && d.w) ratio = d.h / d.w;
+    return { buf, w: W, h: Math.round(W * ratio) };
+  } catch (e) { return null; }
+}
+
 function headerTable(visit, times) {
   const { Table, TableRow, TableCell, WidthType } = D();
   const rows = [
@@ -195,7 +211,7 @@ const LIMITATIONS =
   "[PLACEHOLDER. Confirm against RDG standard language before issue.]";
 
 async function buildReport(visit, recs) {
-  const { Document, Packer, Paragraph, TextRun, Footer, PageNumber, AlignmentType } = D();
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Footer, PageNumber, AlignmentType } = D();
 
   const sorted = recs.slice().sort((a, b) => a.ts - b.ts);
   const times = sorted.length
@@ -205,9 +221,18 @@ async function buildReport(visit, recs) {
 
   const items = sorted.filter(r => r.tag === "Issue" || r.tag === "Action");
 
+  const logo = await logoBits();
+  const masthead = logo
+    ? [ new Paragraph({ spacing: { after: 60 }, children: [
+          new ImageRun({ data: logo.buf, transformation: { width: logo.w, height: logo.h } }) ] }),
+        p("925 Tuckaseegee Road, Suite 110, Charlotte, NC 28208   |   704.377.2990",
+          { size: 15, color: GREY, after: 240 }) ]
+    : [ p("REDLINE DESIGN GROUP", { bold: true, size: 24, color: RED, after: 0 }),
+        p("925 Tuckaseegee Road, Suite 110, Charlotte, NC 28208   |   704.377.2990",
+          { size: 15, color: GREY, after: 240 }) ];
+
   const body = [
-    p("REDLINE DESIGN GROUP", { bold: true, size: 24, color: RED, after: 0 }),
-    p("925 Tuckaseegee Road, Suite 110, Charlotte, NC 28208   |   704.377.2990", { size: 15, color: GREY, after: 240 }),
+    ...masthead,
     p("SITE VISIT REPORT", { bold: true, size: 30, after: 200 }),
     headerTable(visit, times),
     p("", { after: 200 }),

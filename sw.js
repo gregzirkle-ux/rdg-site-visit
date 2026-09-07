@@ -1,15 +1,33 @@
-const CACHE = "rdg-sv-5";
-const FILES = ["./index.html","./report.js","./docx.umd.js","./manifest.json","./icon-192.png","./icon-512.png"];
+const CACHE = "rdg-sv-6";
+const FILES = ["./index.html","./report.js","./docx.umd.js","./logo.png",
+               "./manifest.json","./icon-192.png","./icon-512.png"];
+
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.allSettled(FILES.map(f => c.add(f))))   // a missing logo must not fail the install
+      .then(() => self.skipWaiting())
+  );
 });
+
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(k =>
-    Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys()
+    .then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x))))
+    .then(() => self.clients.claim()));
 });
+
+/* network first: always take a fresh copy when there is signal, fall back to cache offline */
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const u = new URL(e.request.url);
-  if (u.origin !== self.location.origin) return;   // let the weather call go straight to the network
-  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+  if (u.origin !== self.location.origin) return;
+  e.respondWith(
+    fetch(e.request)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(()=>{});
+        return res;
+      })
+      .catch(() => caches.match(e.request))
+  );
 });
