@@ -59,22 +59,27 @@ function measure(blob) {
 }
 
 async function imageBits(blob) {
-  const buf = await blob.arrayBuffer();
-  let ratio = 0.75;                       /* sane default if measuring fails */
+  // A report-sized copy keeps Word files small. Stored photos are never changed.
+  const url = URL.createObjectURL(blob);
   try {
-    if (typeof createImageBitmap === "function") {
-      const bmp = await createImageBitmap(blob);
-      ratio = bmp.height / bmp.width;
-      if (bmp.close) bmp.close();
-    } else {
-      const d = await measure(blob);
-      if (d && d.w) ratio = d.h / d.w;
-    }
-  } catch (e) {
-    const d = await measure(blob);
-    if (d && d.w) ratio = d.h / d.w;
-  }
-  return { buf, w: PHOTO_PX, h: Math.round(PHOTO_PX * ratio) };
+    const im = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Photo cannot be decoded"));
+      image.src = url;
+    });
+    const scale = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(im.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(im.naturalHeight * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Photo conversion unavailable");
+    ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
+    const copy = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
+    if (!copy || !copy.size) throw new Error("Photo conversion failed");
+    return { buf: await copy.arrayBuffer(), w: PHOTO_PX,
+      h: Math.round(PHOTO_PX * im.naturalHeight / im.naturalWidth) };
+  } finally { URL.revokeObjectURL(url); }
 }
 
 /* Uses logo.png from the app folder if it is there, otherwise falls back to type. */

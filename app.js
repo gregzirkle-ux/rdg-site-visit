@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v10';
+const BUILD='v11-photo';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId'];
@@ -143,7 +143,7 @@ async function startCam(){
   try{
     if(stream) stream.getTracks().forEach(t=>t.stop());
     const acquired = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:"environment"}, width:{ideal:2560}, height:{ideal:1440} }, audio:false });
+      video:{ facingMode:{ideal:"environment"}, width:{ideal:3840}, height:{ideal:2160} }, audio:false });
     if(request !== cameraRequest || !visit || reviewing || !$("#start").classList.contains("hide")){ acquired.getTracks().forEach(t=>t.stop()); return; }
     stream = acquired; track = stream.getVideoTracks()[0];
     const v = $("#cam");
@@ -207,7 +207,8 @@ wrap.addEventListener("touchend",   () => { pinchStart = 0; }, {passive:true});
 /* ---------- capture ---------- */
 const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
-const MAX = 1600;
+// Preserve the available camera-frame resolution; do not upscale.
+const PHOTO_QUALITY = 0.92;
 function shoot(){
   const v = $("#cam");
   if(busy || !v.videoWidth || !visit || reviewing || visit.closed) return;
@@ -221,10 +222,9 @@ function shoot(){
     try {
       const crop = nativeZoom ? 1 : zoom;
       const sw = v.videoWidth / crop, sh = v.videoHeight / crop;
-      const scale = Math.min(1, MAX / Math.max(sw, sh));
-      canvas.width = Math.round(sw * scale); canvas.height = Math.round(sh * scale);
+      canvas.width = Math.max(1, Math.round(sw)); canvas.height = Math.max(1, Math.round(sh));
       ctx.drawImage(v, (v.videoWidth-sw)/2, (v.videoHeight-sh)/2, sw, sh, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.7));
+      const blob = await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",PHOTO_QUALITY));
       if(!blob || !blob.size) throw new Error("The camera did not return a photo. Please take it again.");
       lastId = await savePhoto(vid, ts, blob, shotArea);
       if(visit && visit.id===vid){ await refreshCount(); showUndo(); }

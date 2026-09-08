@@ -1,15 +1,16 @@
-# RDG Site Visit v10
+# RDG Site Visit v11-photo
 
-Extract this ZIP and upload its contents to the root of your existing GitHub repository. Commit to trigger Vercel deployment. In the app, return to Start, tap Check for update, and accept the update. Confirm Build v10.
+Photo-quality update only. Automatic cloud sync and 30-day removal are NOT implemented.
 
-Changes:
-- Project selector has explicit text color, native selection appearance, and fixed sizing, plus a visible selected project name.
-- Removed the link-to-existing-photo-item control. Existing links and recurring issue history are preserved.
-- One week and Two weeks highlight red when their calculated date is selected.
-- Added Select date labels to due date fields.
-- Safety photos and tracked safety items appear in a priority section before other observations, with bold red descriptions. New safety items carry forward until closed.
-- Photo observation numbers stay consistent with the gallery even when safety photos appear first.
+- Requests a 3840 x 2160 camera stream where supported, preserving the actual available frame dimensions after zoom.
+- Saves JPEGs at quality 0.92 instead of 0.7, removing the 1600-pixel capture limit.
+- These are camera-stream images, not guaranteed full-resolution sensor originals. Device/browser capabilities determine actual resolution. Existing photos cannot gain lost detail.
+- Word reports use separate copies capped at 1600 pixels and JPEG quality 0.8; stored photos remain unchanged.
+- Existing database and backup format remain compatible. Higher-quality photos use more device storage.
+- Existing manual backup/restore remains available until verified cloud storage exists. No automatic deletion is enabled.
 
-Keep the same site address and browser to retain saved data. Back up your projects before updating. Do not clear site data. v9 backups remain supported. Completed visits stay read only.
+## Install
+Back up existing projects first. Replace hosted files at the SAME site address. Use Check for update, return to Start, then reopen. Verify camera capture on the target iPhone before a site visit.
 
-Local verification is described in the accompanying delivery message. An actual iPhone check remains necessary.
+## Cloud limitation
+Safari cannot retain writable access to a chosen iCloud Drive folder or reliably detect Wi-Fi versus cellular. CloudKit web containers are not ordinary iCloud Drive folders. The requested automatic iCloud Drive workflow requires a native iPhone component and Apple development setup. Manual Save to Files is possible but is not verified automatic cloud sync.
