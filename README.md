@@ -1,22 +1,35 @@
-# RDG Site Visit v12
+# RDG Site Visit v13
+
+The start-page STORAGE disclosure is collapsed by default and contains Open recovery file, Review phone storage, Save all app data, and Restore backup.
 
 ## Install
 1. Save a backup of current work before updating.
-2. Replace the files in your existing GitHub repository and let Vercel redeploy. Keep the SAME website address. Include the new cloud.js file.
-3. In the app, use Check for update. Return to Start and reopen the app. Confirm Build v12.
+2. Replace the files in your existing GitHub repository and let Vercel redeploy. Keep the SAME website address. Include cloud.js and the new archive.js file.
+3. In the app, use Check for update. Return to Start and reopen the app. Confirm Build v13.
 
 ## Save a visit to iCloud Drive
 1. Complete the visit. Open it from Past visits and tap Save to Cloud.
-2. When you are on Wi-Fi, save the report, photo batches, photo index and project recovery file.
-3. On iPhone, select Save to Files, then iCloud Drive. Create or choose a project / visit folder and use that folder for each group.
-4. Check the files in Files and let iCloud finish uploading. The optional confirmation button records YOUR check; it is not automatic verification.
-5. Download the folder contents from iCloud to your server when convenient.
+2. Tap Save ZIP to Cloud when you are ready and on Wi-Fi.
+3. On iPhone choose Save to Files, then iCloud Drive, and select your project folder. If sharing is unavailable, use Download ZIP and move it from Downloads to iCloud Drive.
+4. Check the ZIP finishes uploading in Files. Extract it to reveal the SVR folder and its contents.
+5. Download the ZIP or extracted files to your server when convenient.
 
-Photos are separate JPEGs (or their original saved image format), not a ZIP. Filenames match the report observation numbers. A CSV photo index preserves notes, time, location and tags. If batch sharing is unavailable, use the individual Save buttons. Download is a fallback: move downloaded files to iCloud Drive yourself.
+One ZIP contains everything. SVR-001.zip extracts to:
 
-The project recovery file (.json) includes the selected project's visit history, photo annotations and all photos still stored for that project. It is separate from the Word report and individual images. Keep dated recovery files; later copies cannot recreate photos you already removed from the phone.
+| Folder | Contents |
+|---|---|
+| SVR-001/Report/ | Word report |
+| SVR-001/Photos/ | Individual photos named by observation number |
+| SVR-001/Photo-Index/ | CSV index with photo notes, time, locations and tags |
+| SVR-001/Recovery/ | Dated project recovery JSON |
 
-Saving an unfinished visit is a draft export. Complete it and save again for final records. The app does not detect Wi-Fi or start uploads automatically. Your phone manages the actual cloud upload after Save to Files.
+Keep each project's ZIPs in its own project folder. Further visits use SVR-002, SVR-003, etc. If saving a revised copy of the same visit, choose deliberately whether to replace or retain the prior ZIP in Files. No archive is overwritten by the app itself.
+
+The recovery file contains the selected project's CURRENT available photo and visit history snapshot, including recurring-item history. It is not limited to the exported visit. Keep older recovery files if their photos have been removed locally; a newer snapshot cannot recreate those removed photos. To restore, extract the ZIP and select the JSON inside Recovery.
+
+Draft visits can be exported; complete and save again for final records. A complete visit archive cannot be generated if its photos have been removed locally: use its earlier saved ZIP or restore its recovery file first. Empty-photo visits still include a Photos folder.
+
+The app does not detect Wi-Fi or upload automatically. Your phone handles uploading after Save to Files. The optional confirmation button records YOUR check, not automatic verification.
 
 ## Clean up phone storage
 - A notice appears when a completed visit is at least 30 days past completion and has removable photos. Older visits without a completion timestamp use the visit date.
@@ -26,9 +39,9 @@ Saving an unfinished visit is a draft export. Complete it and save again for fin
 - After removal, old observations show a clear placeholder. Use the cloud report or restore a recovery file containing those photos to rebuild the old report.
 
 ## Restore a project
-From Start, choose Open project recovery file and select its JSON file in Files. If the project already exists, confirmation explains that this replaces its current visits, including newer work. Save current work first. Other projects are preserved. This restores a snapshot; it does not merge newer work.
+From Start, expand STORAGE and choose Open recovery file and select its JSON file in Files. If the project already exists, confirmation explains that this replaces its current visits, including newer work. Save current work first. Other projects are preserved. This restores a snapshot; it does not merge newer work.
 
-More storage options retains Save all app data and Restore backup for full-device recovery. Restore backup replaces ALL app projects. v9/v10/v11 version-1 backups remain supported. v12 files with removed-photo records require v12 or newer.
+STORAGE also contains Save all app data and Restore backup for full-device recovery. Restore backup replaces ALL app projects. v9/v10/v11 version-1 backups remain supported. v13 files with removed-photo records require v13 or newer.
 
 ## Photo quality
 Requests a 3840 x 2160 camera stream where supported, removes the old 1600-pixel capture cap and saves JPEGs at quality 0.92. Actual resolution depends on the device and browser. These are camera-stream captures, not guaranteed full sensor originals. Existing photos cannot gain lost detail. Word reports use smaller copies without changing stored photos.
@@ -38,4 +51,8 @@ JavaScript syntax and local data checks passed, covering project recovery, exact
 
 Browser preview access was denied in this session. The iPhone camera, native share sheet and iCloud handoff need a device check before field use. Try one test visit, save all groups, check the cloud files and open the project recovery file on another device before removing important local photos.
 
-For repeatable local checks with Node.js 22 or newer: node tests/storage-checks.cjs
+For repeatable local checks with Node.js 22 or newer:
+- node tests/storage-checks.cjs
+- node tests/archive-checks.cjs
+
+ZIP output was also opened with an independent Python ZIP reader: checksums, Unicode filenames, folder entries and exact file bytes passed.

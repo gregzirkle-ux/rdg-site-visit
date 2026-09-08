@@ -313,9 +313,9 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
     <div id="pastList"></div>
   </div>
   <div class="notice" id="cleanupNotice" hidden><p id="cleanupCount"></p><button class="btn" id="reviewCleanup">Review phone storage</button></div>
-  <div class="tools"><p class="auto">Open a visit and choose Save to Cloud to save its report, photos and project recovery file.</p>
-<button class="ghost" id="restoreProject">Open project recovery file</button><input hidden type="file" id="projectFile" accept=".json,application/json">
-<details><summary>More storage options</summary><button class="ghost" id="manageStorage">Review phone storage</button><button class="ghost" id="backup">Save all app data</button>
+  <div class="tools"><p class="auto">Open a visit and choose Save to Cloud to save one ZIP with its report, photos, photo index and project recovery file.</p>
+<details><summary>STORAGE</summary><button class="ghost" id="restoreProject">Open recovery file</button><input hidden type="file" id="projectFile" accept=".json,application/json">
+<button class="ghost" id="manageStorage">Review phone storage</button><button class="ghost" id="backup">Save all app data</button>
 <button class="ghost" id="restore">Restore backup</button><input hidden type="file" id="restoreFile" accept=".json,application/json">
 </details><button class="btn" id="checkUpdate">Check for update</button><div class="auto" id="updateNote"></div></div>
 <div class="metaLines">
@@ -339,7 +339,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
 </section>
 <section class="sheet" id="cloudSheet">
  <div class="sheethead"><button class="btn" id="cloudClose">Back</button><h2>Save to Cloud</h2></div>
- <div class="pad"><h3 id="cloudTitle"></h3><p class="cloud-note">When you are ready and on Wi-Fi, use each Save button. On iPhone, choose <b>Save to Files → iCloud Drive</b> and use the same project / visit folder. Files stay separate; no ZIP is needed.</p>
+ <div class="pad"><h3 id="cloudTitle"></h3><p class="cloud-note">When you are ready and on Wi-Fi, save the complete visit ZIP. On iPhone, choose <b>Save to Files → iCloud Drive</b> and choose your project folder. Extract the ZIP there to reveal the organized SVR folder.</p>
  <p class="cloud-note">Nothing uploads automatically. Saving to Files hands the files to your phone; check iCloud has finished uploading before removing local copies.</p>
  <p class="cloud-status" id="cloudStatus" role="status" aria-live="polite"></p>
  <div id="cloudFiles"></div><button class="ghost" id="cloudChecked">I checked my files in iCloud</button>
@@ -356,6 +356,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
 
 <script src="docx.umd.js"></script>
 <script src="report.js"></script>
+<script src="archive.js"></script>
 <script src="cloud.js"></script>
 <script src="app.js"></script>
 </body>

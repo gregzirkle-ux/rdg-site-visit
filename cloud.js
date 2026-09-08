@@ -45,32 +45,15 @@ function saveFileButton(files, label, status) {
         button.disabled = true;
         navigator.share({files}).then(() => {
           status.textContent = 'Files handed to the selected app. Check your destination and upload status in Files; this app cannot verify cloud storage.';
-        }).catch(e => { if (e.name !== 'AbortError') status.textContent = 'Sharing failed: ' + e.message + '. Use the individual download buttons below.'; })
+        }).catch(e => { if (e.name !== 'AbortError') status.textContent = 'Sharing failed: ' + e.message + '. Use Download ZIP below.'; })
           .finally(() => { button.disabled = false; });
       } else if (files.length === 1) {
         download(files[0], files[0].name);
         status.textContent = 'Download requested. Move the file from Downloads to your cloud folder and check it there.';
       } else status.textContent = 'This browser cannot share this batch. Save the files individually below.';
-    } catch (e) { button.disabled = false; status.textContent = 'Could not share: ' + e.message + '. Use Download below.'; }
+    } catch (e) { button.disabled = false; status.textContent = 'Could not share: ' + e.message + '. Use Download ZIP below.'; }
   };
   return button;
-}
-function fileRows(parent, files, status) {
-  for (const file of files) {
-    const row = document.createElement('div'); row.className = 'file-row';
-    const name = document.createElement('span'); name.textContent = file.name + ' · ' + (file.size / 1048576).toFixed(1) + ' MB';
-    const save = saveFileButton([file], 'Save', status); save.className = 'btn';
-    const dl = document.createElement('button'); dl.className = 'btn'; dl.textContent = 'Download';
-    dl.onclick = () => { download(file, file.name); status.textContent = 'Download requested. Check Downloads and move the file to your cloud folder.'; };
-    row.append(name, save, dl); parent.append(row);
-  }
-}
-function fileGroup(title, files, batchLabel) {
-  const card = document.createElement('article'); card.className = 'itemcard';
-  const heading = document.createElement('h3'); heading.textContent = title; card.append(heading);
-  const status = $('#cloudStatus');
-  if (batchLabel && files.length) card.append(saveFileButton(files, batchLabel, status));
-  fileRows(card, files, status); $('#cloudFiles').append(card);
 }
 async function openCloud() {
   await captureTask; stopCamera();
@@ -85,6 +68,7 @@ async function openCloud() {
     const meta = new Map(snapshot.meta.map(m => [m.id, m]));
     const photos = snapshot.photos.filter(p => p.visitId === v.id).sort((a,b) => a.ts-b.ts).map(p => joinMeta(p, meta.get(p.id)));
     const missing = photos.filter(p => !p.blob?.size).length;
+    if(missing)throw new Error('This visit has photos removed from the phone. Use its saved ZIP or restore the project recovery file before creating another complete archive.');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const report = missing ? null : new File([await window.SVReport.buildReport(clone(v), photos)], visitStem(v) + '_Report.docx', {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
     const imageFiles = photos.flatMap((p, i) => p.blob?.size ? [new File([p.blob], photoFilename(v, p, i), {type:p.blob.type})] : []);
@@ -92,15 +76,20 @@ async function openCloud() {
     const index = new File(['\uFEFF'+lines.map(row=>row.map(csvCell).join(',')).join('\r\n')], visitStem(v)+'_Photo-Index.csv', {type:'text/csv'});
     // This copy holds only the selected project, including history required by recurring items.
     const recovery = await projectRecoveryFile(snapshot, stamp);
-    if (report) fileGroup('1. Report', [report]);
-    else fileGroup('1. Report: use the copy already saved in your cloud', []);
-    for (let i=0; i<imageFiles.length; i+=10) fileGroup('2. Photos '+(i+1)+'–'+Math.min(i+10,imageFiles.length), imageFiles.slice(i,i+10), 'Save these photos');
-    if (!imageFiles.length) fileGroup('2. No photos on this phone for this visit', []);
-    fileGroup('Photo index', [index]);
-    fileGroup('3. Project recovery file', [recovery]);
-    cloudSession = {visitId:v.id, preparedAt:Date.now(), missing, closed:v.closed};
-    $('#cloudChecked').disabled = !!missing || !v.closed;
-    $('#cloudStatus').textContent = missing ? missing+' photos were previously removed. These files do not replace your earlier complete archive. Restore its recovery file to recover them.' : (v.closed?'Ready. ':'Draft visit: complete the visit and save again for your final records. ')+'Save each group into the same cloud folder. The recovery file includes this project’s available photos and visit history; keep dated copies.';
+    const folder = 'SVR-' + String(v.num).padStart(3, '0');
+    $('#cloudStatus').textContent = 'Packing the complete visit ZIP…';
+    const archive = await makeVisitZip(visitArchiveEntries(folder, report, imageFiles, index, recovery), folder + '.zip');
+    const card = document.createElement('article'); card.className = 'itemcard';
+    const heading = document.createElement('h3'); heading.textContent = archive.name + ' · ' + (archive.size / 1048576).toFixed(1) + ' MB';
+    const contents = document.createElement('p'); contents.textContent = 'Includes Report, Photos (' + imageFiles.length + '), Photo-Index and Recovery folders.';
+    const save = saveFileButton([archive], 'Save ZIP to Cloud', $('#cloudStatus')); save.className = 'primary';
+    const fallback = document.createElement('button'); fallback.className = 'ghost'; fallback.textContent = 'Download ZIP';
+    fallback.onclick = () => { download(archive, archive.name); $('#cloudStatus').textContent = 'Download requested. Move the ZIP to your project folder in iCloud Drive and check the upload finishes.'; };
+    card.append(heading, contents, save, fallback); $('#cloudFiles').append(card);
+    cloudSession = {visitId:v.id, preparedAt:Date.now(), missing:0, closed:v.closed};
+    $('#cloudChecked').disabled = !v.closed;
+    $('#cloudStatus').textContent = (v.closed ? 'Ready. ' : 'Draft visit: complete it and save again for final records. ') + 'Save this ZIP in your project folder. Extract it to open the SVR folder. Keep earlier recovery files if photos were previously removed from this project.';
+
   } catch(e) { $('#cloudStatus').textContent = 'Could not prepare files: '+e.message; }
 }
 function protectedPhotoIds(visits) {
@@ -169,7 +158,7 @@ function remapProjectCopy(data, existing) {
 }
 async function restoreProjectFile(file) {
   const raw=JSON.parse(await file.text());
-  if(raw.format!=='rdg-sitevisit-project'||raw.version!==2||raw.data?.projects?.length!==1)throw new Error('Choose a project recovery file created by Save to Cloud. For an older full backup, use Restore backup under More storage options.');
+  if(raw.format!=='rdg-sitevisit-project'||raw.version!==2||raw.data?.projects?.length!==1)throw new Error('Choose a project recovery file created by Save to Cloud. For an older full backup, use Restore backup under STORAGE.');
   const data=validateBackup({...raw,format:'rdg-sitevisit-backup'});
   for(const p of data.photos)if(p.blob&&!await measure(p.blob))throw new Error('A recovery photo cannot be opened. No data was changed.');
   const source=data.projects[0],current=(await read('projects')).find(p=>p.key===source.key);
