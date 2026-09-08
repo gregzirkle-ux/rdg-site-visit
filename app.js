@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v11-photo';
+const BUILD='v12';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId'];
@@ -90,7 +90,7 @@ async function loadState(){
  projects=(await read('projects')).sort((a,b)=>a.name.localeCompare(b.name));allVisits=(await allV()).sort((a,b)=>a.id-b.id);
  if(!projects.some(p=>p.id===selectedProject))selectedProject=projects.some(p=>p.id===stored('selectedProject',null))?stored('selectedProject',null):projects[0]?.id||null;
  pending=allVisits.filter(v=>v.projectId===selectedProject&&!v.closed).pop()||null;
- remember('selectedProject',selectedProject);await paintStart();
+ remember('selectedProject',selectedProject);await paintStart();await paintCleanupNotice();
 }
 async function paintStart(){
  const select=$('#projectSelect');select.replaceChildren();
@@ -105,7 +105,7 @@ async function paintStart(){
  $('#startBtn').style.display=pending?'none':'block';$('#startBtn').textContent='Start new visit';
  $('#sNum').textContent=pending?svr(pending.num)+' in progress':'Next '+svr(nextNum);
  const past=pv.filter(v=>v.closed).sort((a,b)=>b.id-a.id);$('#pastWrap').style.display=past.length?'block':'none';$('#pastList').replaceChildren();
- for(const v of past){const b=document.createElement('button');b.className='prow';const a=document.createElement('span');a.className='pn';a.textContent=svr(v.num);const d=document.createElement('span');d.className='pd';d.textContent=new Date(v.date).toLocaleDateString()+' · '+(v.items||[]).filter(i=>i.status!=='Closed').length+' open items';b.append(a,d);b.onclick=safe(()=>openPast(v));$('#pastList').append(b);}
+ for(const v of past){const b=document.createElement('button');b.className='prow';const a=document.createElement('span');a.className='pn';a.textContent=svr(v.num);const d=document.createElement('span');d.className='pd';d.textContent=(v.localPhotosRemovedAt?'Photos removed · ':'')+new Date(v.date).toLocaleDateString()+' · '+(v.items||[]).filter(i=>i.status!=='Closed').length+' open items';b.append(a,d);b.onclick=safe(()=>openPast(v));$('#pastList').append(b);}
 }
 on('#addProject',async()=>{const name=prompt('Project name');if(!name?.trim())return;const number=prompt('Project number (optional)');if(number===null)return;
  const key=number.trim()?'number:'+number.trim().toLowerCase():'name:'+name.trim().toLowerCase();
@@ -139,6 +139,7 @@ function wmo(c){return ({0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcas
 /* ---------- camera ---------- */
 let cameraRequest = 0;
 async function startCam(){
+  if($('#cloudSheet').classList.contains('open'))return;
   const request = ++cameraRequest;
   try{
     if(stream) stream.getTracks().forEach(t=>t.stop());
@@ -319,7 +320,7 @@ async function openGal(){await captureTask;const recs=await visitPhotos();urls.f
  $('#galTitle').textContent=svr(visit.num)+' · '+recs.length+' photos';$('#galClose').textContent=reviewing?'Start':'Camera';
  for(const id of ['#galBack','#galPause','#galEnd'])$(id).style.display=reviewing?'none':'block';$('#galToStart').style.display=reviewing?'block':'none';
  $('#galBuild').disabled=false;$('#galExport').disabled=false;$('#galItems').textContent=(visit.closed?'View items':'Review items')+' ('+visit.items.filter(i=>i.status!=='Closed').length+' open)';
- recs.forEach((r,i)=>{const u=URL.createObjectURL(r.blob);urls.push(u);const c=document.createElement('button');c.className='cell'+(r.note||r.tag?' noted':'');c.style.backgroundImage='url('+u+')';c.setAttribute('aria-label','Observation '+(i+1));const n=document.createElement('span');n.className='n';n.textContent=String(i+1).padStart(3,'0');const t=document.createElement('span');t.className='t';t.textContent=fmt(r.ts);c.append(n,t);c.onclick=safe(()=>openDet(r.id,i+1));$('#grid').append(c);});$('#gal').classList.add('open');}
+ recs.forEach((r,i)=>{if(!r.blob?.size){const row=document.createElement('p');row.className='auto';row.textContent='Observation '+String(i+1).padStart(3,'0')+' · Photo removed from phone. Open the saved cloud photo or restore the project recovery file.';$('#grid').append(row);return;}const u=URL.createObjectURL(r.blob);urls.push(u);const c=document.createElement('button');c.className='cell'+(r.note||r.tag?' noted':'');c.style.backgroundImage='url('+u+')';c.setAttribute('aria-label','Observation '+(i+1));const n=document.createElement('span');n.className='n';n.textContent=String(i+1).padStart(3,'0');const t=document.createElement('span');t.className='t';t.textContent=fmt(r.ts);c.append(n,t);c.onclick=safe(()=>openDet(r.id,i+1));$('#grid').append(c);});$('#gal').classList.add('open');}
 on('#thumb',e=>{e.stopPropagation();return openGal();});
 on('#galClose',()=>reviewing?backToStart():$('#gal').classList.remove('open'));
 on('#galBack',()=>$('#gal').classList.remove('open'));on('#galPause',backToStart);on('#galToStart',backToStart);on('#galInfo',openVisitInfo);on('#galItems',()=>openItems(false));
@@ -368,7 +369,7 @@ async function buildReport(){await captureTask;
  const unreviewed=visit.items.filter(i=>i.status==='Not reviewed').length;
  if(!visit.closed&&unreviewed&&!confirm(unreviewed+' item(s) have not been reviewed. Export with that status shown? Choose Cancel to review them.')){await openItems(false);return;}
  $('#busyText').textContent='Building report';$('#busyClose').style.display='none';$('#busyWrap').classList.add('show');
- try{const recs=await visitPhotos();if(recs.some(r=>!r.blob?.size))throw new Error('A photo is unreadable. Close and reopen the app, then try again.');
+ try{const recs=await visitPhotos();if(recs.some(r=>!r.blob?.size))throw new Error('Some photos are no longer on this phone. Use the report saved in your cloud or restore the project recovery file first.');
  const snapshot=clone(visit);readyBlob=await window.SVReport.buildReport(snapshot,recs);readyName=window.SVReport.reportFileName(snapshot);
  $('#doneName').textContent=readyName;$('#doneNote').textContent='Save or share the file. Complete the visit when you are finished editing.';$('#doneComplete').hidden=!!visit.closed;$('#done').classList.add('open');$('#busyWrap').classList.remove('show');
  }catch(e){busyFail('Could not build the report. '+e.message);}}
@@ -383,12 +384,12 @@ function blobData(blob){return new Promise((resolve,reject)=>{const reader=new F
 async function exportBackup(){
  $('#backup').disabled=true;$('#backup').textContent='Preparing backup';
  try{const snapshot=await transaction(STORES,'readonly',tx=>{const qs=STORES.map(n=>tx.objectStore(n).getAll());return ()=>Object.fromEntries(STORES.map((n,i)=>[n,qs[i].result]));});
- for(const p of snapshot.photos){p.data=await blobData(p.blob);delete p.blob;}
- download(new Blob([JSON.stringify({format:'rdg-sitevisit-backup',version:1,createdAt:new Date().toISOString(),data:snapshot})],{type:'application/json'}),'RDG-Site-Visit-Backup-'+dateInput(Date.now())+'.json');
- alert('Backup download requested. Keep the saved JSON file somewhere you can find it. It contains every project, visit and photo.');
- }finally{$('#backup').disabled=false;$('#backup').textContent='Back up all projects';}}
+ for(const p of snapshot.photos){if(p.blob?.size){p.data=await blobData(p.blob);delete p.archived;}else if(p.archived===true){p.data=null;}else throw new Error('A saved photo is unreadable.');delete p.blob;}
+ download(new Blob([JSON.stringify({format:'rdg-sitevisit-backup',version:2,createdAt:new Date().toISOString(),data:snapshot})],{type:'application/json'}),'RDG-Site-Visit-Backup-'+dateInput(Date.now())+'.json');
+ alert('Backup download requested. Keep the saved JSON file somewhere you can find it. It contains all project records and photos still on this phone. Previously removed photos remain in your earlier cloud files.');
+ }finally{$('#backup').disabled=false;$('#backup').textContent='Save all app data';}}
 function validateBackup(raw){
- if(raw?.format!=='rdg-sitevisit-backup'||raw.version!==1||!raw.data)throw new Error('This is not a supported Site Visit backup.');
+ if(raw?.format!=='rdg-sitevisit-backup'||![1,2].includes(raw.version)||!raw.data)throw new Error('This is not a supported Site Visit backup.');
  const d=raw.data,maps={};
  for(const n of STORES){if(!Array.isArray(d[n]))throw new Error('Backup is missing '+n+'.');maps[n]=new Map();for(const r of d[n]){if(!r||!Number.isSafeInteger(r.id)||r.id<1||maps[n].has(r.id))throw new Error('Invalid or duplicate record in '+n+'.');maps[n].set(r.id,r);}}
  const str=(v)=>typeof v==='string';const validDate=v=>Number.isFinite(v)&&v>0;
@@ -398,13 +399,14 @@ function validateBackup(raw){
  for(const k of ['project','projNum','attendees','preparedBy','weather','temp'])if(!str(v[k]))throw new Error('Invalid visit details.');
  const n=v.projectId+':'+v.num;if(nums.has(n))throw new Error('Duplicate visit number.');nums.add(n);
  if(!v.closed){if(active.has(v.projectId))throw new Error('More than one unfinished visit for a project.');active.add(v.projectId);}
- const ids=new Set();for(const it of v.items){const origin=maps.visits.get(it.originVisitId);if(!str(it.id)||ids.has(it.id)||!str(it.ref)||!origin||origin.projectId!==v.projectId||!validDate(it.firstNoted)||!['New','Still open','Not reviewed','Closed'].includes(it.status))throw new Error('Invalid item history.');ids.add(it.id);
+ if(v.legacyReportItems!=null&&!Array.isArray(v.legacyReportItems))throw new Error('Invalid legacy report history.');
+ for(const itemList of [v.items,...(v.legacyReportItems?[v.legacyReportItems]:[])]){const ids=new Set();for(const it of itemList){const origin=maps.visits.get(it.originVisitId);if(!str(it.id)||ids.has(it.id)||!str(it.ref)||!origin||origin.projectId!==v.projectId||!validDate(it.firstNoted)||!['New','Still open','Not reviewed','Closed'].includes(it.status))throw new Error('Invalid item history.');ids.add(it.id);
  for(const k of ['note','owner','due','area','update'])if(!str(it[k]))throw new Error('Invalid item details.');
  if(!Array.isArray(it.followupPhotoIds))throw new Error('Invalid item photos.');
  for(const id of [it.photoId,...it.followupPhotoIds].filter(id=>id!=null)){const photo=maps.photos.get(id);if(!photo||maps.visits.get(photo.visitId)?.projectId!==v.projectId)throw new Error('An item references a missing photo or another project.');}
- }}
+ }}}
  for(const m of d.meta){if(!maps.photos.has(m.id))throw new Error('Photo notes reference a missing photo.');for(const k of NOTE_KEYS)if(m[k]!=null&&!str(m[k]))throw new Error('Invalid photo notes.');}
- for(const p of d.photos){if(!maps.visits.has(p.visitId)||!validDate(p.ts)||!str(p.data)||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(p.data))throw new Error('Invalid photo in backup.');const [header,encoded]=p.data.split(',');let bytes;try{bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));}catch{throw new Error('A photo is damaged in the backup.');}if(!bytes.length)throw new Error('Backup contains an empty photo.');p.blob=new Blob([bytes],{type:header.slice(5,header.indexOf(';'))});delete p.data;}
+ for(const p of d.photos){if(raw.version===2&&p.archived===true&&p.data===null){if(!maps.visits.has(p.visitId)||!validDate(p.ts))throw new Error('Invalid archived photo.');delete p.blob;continue;}if(!maps.visits.has(p.visitId)||!validDate(p.ts)||!str(p.data)||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(p.data))throw new Error('Invalid photo in backup.');const [header,encoded]=p.data.split(',');let bytes;try{bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));}catch{throw new Error('A photo is damaged in the backup.');}if(!bytes.length)throw new Error('Backup contains an empty photo.');p.blob=new Blob([bytes],{type:header.slice(5,header.indexOf(';'))});delete p.data;delete p.archived;}
  return d;
 }
 let dataEpoch=0;
@@ -412,7 +414,7 @@ on('#backup',exportBackup);on('#restore',()=>$('#restoreFile').click());
 $('#restoreFile').onchange=safe(async()=>{const file=$('#restoreFile').files[0];$('#restoreFile').value='';if(!file)return;
  const d=validateBackup(JSON.parse(await file.text()));
  if(!confirm('Restore '+d.projects.length+' projects, '+d.visits.length+' visits and '+d.photos.length+' photos? This replaces all data currently in this app. Cancel and back up first if you need to keep the current data.'))return;
- for(const p of d.photos){if(!await measure(p.blob))throw new Error('A photo in the backup cannot be opened. No saved data was changed.');}
+ for(const p of d.photos){if(p.blob&&!await measure(p.blob))throw new Error('A photo in the backup cannot be opened. No saved data was changed.');}
  dataEpoch++;await transaction(STORES,'readwrite',tx=>{for(const n of STORES){const s=tx.objectStore(n);s.clear();d[n].forEach(r=>s.put(r));}});
  selectedProject=null;await loadState();alert('Backup restored.');});
 let registration=null;
@@ -423,6 +425,7 @@ async function setupUpdates(){if(!('serviceWorker'in navigator))return;
  ready();registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',ready));
  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!visit)location.reload();else $('#updateNote').textContent='Update installed. Return to Start and reopen the app to load it.';});
 }
+wireCloudUI();
 async function init(){try{db=await openDB();await migrate();await loadState();paintArea();setupUpdates().catch(()=>{});}catch(e){$('#sState').textContent='Could not open saved projects. '+e.message;showError(e);}}
 // One editor tab prevents competing visit numbers and conflicting photo or item edits.
 if(navigator.locks){navigator.locks.request('rdg-sitevisit-editor',{ifAvailable:true},async lock=>{if(!lock){$('#sState').textContent='Site Visit is already open in another tab or window. Close that window, then reload this one.';document.querySelectorAll('button').forEach(b=>b.disabled=true);return;}await init();await new Promise(()=>{});});}else init();

@@ -1,5 +1,5 @@
-const CACHE='rdg-sv-11-photo';
-const FILES=['index.html','app.js','report.js','docx.umd.js','logo.png','manifest.json','icon-192.png','icon-512.png','apple-touch-icon.png'];
+const CACHE='rdg-sv-12';
+const FILES=['index.html','app.js','cloud.js','report.js','docx.umd.js','logo.png','manifest.json','icon-192.png','icon-512.png','apple-touch-icon.png'];
 const BASE=new URL('./',self.location.href);
 self.addEventListener('install',event=>event.waitUntil((async()=>{
  const cache=await caches.open(CACHE);

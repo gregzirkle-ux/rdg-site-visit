@@ -164,6 +164,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
 #projectSelect option{color:#101010;background:#fff}
 .start>*{flex-shrink:0}#selectedProjectName{font-weight:700;margin:8px 0;overflow-wrap:anywhere}
 .itemcard.safety{border:2px solid var(--red);background:#fff1f0}.itemcard.safety h3,.itemcard.safety p{color:var(--red);font-weight:700}
+#cloudSheet,#cleanupSheet{z-index:40}.file-row{display:flex;gap:12px;align-items:center;margin:10px 0}.file-row span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px}.file-row button{flex-shrink:0}.notice{padding:14px;border:1px solid #d8c6b5;border-radius:10px;margin:16px 0;background:#fff7ec}.notice p{margin:0 0 8px}.cloud-status{font-size:14px;white-space:pre-wrap;line-height:1.5}.cloud-note{font-size:14px;line-height:1.5}details>summary{cursor:pointer;padding:12px 0}button[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -230,6 +231,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
   <div class="grid" id="grid"></div>
   <div class="empty" id="galEmpty" style="display:none">No photos yet.</div>
   <div class="pad">
+    <button class="primary" id="galCloud">Save to Cloud</button>
     <button class="ghost" id="galItems">Review items</button><button class="primary" id="galBuild">Build the report</button>
     <button class="ghost" id="galBack">Keep shooting</button>
     <button class="ghost" id="galInfo">Visit info</button>
@@ -277,7 +279,8 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
     <div class="lbl">FILE</div>
     <div id="doneName" style="font-size:15px;word-break:break-all"></div>
     <div class="auto" id="doneNote" style="margin-top:8px"></div>
-    <button class="primary" id="doneShare">Email or share</button>
+    <button class="primary" id="doneCloud">Save to Cloud</button>
+    <button class="ghost" id="doneShare">Email or share</button>
     <button class="ghost" id="doneSave">Save to Files</button>
     <button class="ghost" id="doneComplete">Complete this visit</button><button class="ghost" id="doneStart">Back to Start</button>
   </div>
@@ -309,9 +312,12 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
     <div class="fieldnote" style="margin-top:0">PAST VISITS</div>
     <div id="pastList"></div>
   </div>
-  <div class="tools"><button class="ghost" id="backup">Back up all projects</button>
+  <div class="notice" id="cleanupNotice" hidden><p id="cleanupCount"></p><button class="btn" id="reviewCleanup">Review phone storage</button></div>
+  <div class="tools"><p class="auto">Open a visit and choose Save to Cloud to save its report, photos and project recovery file.</p>
+<button class="ghost" id="restoreProject">Open project recovery file</button><input hidden type="file" id="projectFile" accept=".json,application/json">
+<details><summary>More storage options</summary><button class="ghost" id="manageStorage">Review phone storage</button><button class="ghost" id="backup">Save all app data</button>
 <button class="ghost" id="restore">Restore backup</button><input hidden type="file" id="restoreFile" accept=".json,application/json">
-<button class="btn" id="checkUpdate">Check for update</button><div class="auto" id="updateNote"></div></div>
+</details><button class="btn" id="checkUpdate">Check for update</button><div class="auto" id="updateNote"></div></div>
 <div class="metaLines">
     <span id="sNum">SVR 001</span><span id="sDate"></span><span id="sBuild"></span>
   </div>
@@ -331,6 +337,18 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
  <label class="lbl" for="itemArea">AREA</label><input type="text" id="itemArea">
  <label class="lbl" for="itemUpdate">UPDATE FOR THIS VISIT</label><textarea id="itemUpdate"></textarea></div>
 </section>
+<section class="sheet" id="cloudSheet">
+ <div class="sheethead"><button class="btn" id="cloudClose">Back</button><h2>Save to Cloud</h2></div>
+ <div class="pad"><h3 id="cloudTitle"></h3><p class="cloud-note">When you are ready and on Wi-Fi, use each Save button. On iPhone, choose <b>Save to Files → iCloud Drive</b> and use the same project / visit folder. Files stay separate; no ZIP is needed.</p>
+ <p class="cloud-note">Nothing uploads automatically. Saving to Files hands the files to your phone; check iCloud has finished uploading before removing local copies.</p>
+ <p class="cloud-status" id="cloudStatus" role="status" aria-live="polite"></p>
+ <div id="cloudFiles"></div><button class="ghost" id="cloudChecked">I checked my files in iCloud</button>
+ <p class="auto" id="cloudConfirmed"></p></div>
+</section>
+<section class="sheet" id="cleanupSheet">
+ <div class="sheethead"><button class="btn" id="cleanupClose">Back</button><h2>Phone storage</h2></div>
+ <div class="pad"><p class="cloud-note">Completed visits become eligible 30 days after completion. Nothing is removed automatically. Check the report, photos and recovery file in your cloud before removing a local copy.</p><p class="cloud-note">Visit summaries, numbering and item history stay here. Photos needed by currently open items stay too. To view removed photos or rebuild an old report, restore its project recovery file.</p><div id="cleanupList"></div></div>
+</section>
 <div class="busywrap" id="busyWrap"><div>
   <div id="busyText">Building report</div>
   <button class="ghost" id="busyClose" style="display:none;margin-top:20px">Back</button>
@@ -338,6 +356,7 @@ select,input[type=date]{width:100%;font:inherit;padding:13px;background:white;co
 
 <script src="docx.umd.js"></script>
 <script src="report.js"></script>
+<script src="cloud.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
