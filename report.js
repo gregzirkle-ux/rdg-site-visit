@@ -145,12 +145,19 @@ function headerTable(visit, times) {
   const rows = [
     ["Project",      visit.project || ""],
     ["Project No.",  visit.projNum || ""],
-    ["Report No.",   "SVR " + String(visit.num).padStart(3, "0")],
+    ...(visit.projectAddress ? [["Address", visit.projectAddress]] : []),
+    ...(visit.client ? [["Client / Owner", visit.client]] : []),
+    ["Report No.",   "SVR-" + String(visit.num).padStart(3, "0") + (visit.revision ? "-R" + visit.revision : "")],
     ["Date",         new Date(visit.date).toLocaleDateString([], { weekday:"long", year:"numeric", month:"long", day:"numeric" })],
     ["Photo Time Range", times],
     ["Weather",      [visit.weather, visit.temp].filter(Boolean).join(", ")],
     ["Present",      visit.attendees || ""],
-    ["Prepared By",  visit.preparedBy || ""]
+    ["Prepared By",  visit.preparedBy || ""],
+    ["Company", visit.preparedCompany || ""],
+    ["Contact", [visit.preparedPhone, visit.preparedEmail].filter(Boolean).join(" | ")],
+    ["Report Status", !visit.closed || visit.editing ? "DRAFT" : "Issued"],
+    ...(visit.issuedAt ? [["Issued", new Date(visit.issuedAt).toLocaleString()]] : []),
+    ...(visit.revision ? [["Revision", "R" + visit.revision + (visit.revisionReason ? " | " + visit.revisionReason : "")]] : [])
   ];
   const KEY = 1900;
   return new Table({
@@ -268,7 +275,7 @@ const LIMITATIONS =
   "connection with the Work. Observations recorded here do not relieve the Contractor of the obligation " +
   "to perform the Work in accordance with the Contract Documents. Work not observed or not noted is " +
   "neither approved nor accepted. Photographs represent conditions at the time of the visit only. " +
-  "[PLACEHOLDER. Confirm against RDG standard language before issue.]";
+  "";
 
 async function buildReport(visit, recs) {
   const { Document, Packer, Paragraph, TextRun, ImageRun, Footer, PageNumber, AlignmentType } = D();
@@ -301,6 +308,8 @@ async function buildReport(visit, recs) {
     if (safetyPhotos.length) body.push(await observationTable(safetyPhotos));
     body.push(redRule());
   }
+  body.push(p("ADDITIONAL NOTES", {bold:true,size:20,color:GREY,after:100}));
+  body.push(p(visit.generalNotes || "No additional comments entered.", {after:200}));
   body.push(p("OBSERVATIONS", {bold:true,size:20,color:GREY,after:160}));
   if (otherPhotos.length) body.push(await observationTable(otherPhotos));
   else body.push(p(sorted.length ? "All photographs are listed in the safety section above." : "No photographs recorded during this visit."));
@@ -313,7 +322,7 @@ async function buildReport(visit, recs) {
   body.push(p("LIMITATIONS OF THIS REPORT", { bold: true, size: 17, color: GREY, caps: true, after: 80 }));
   body.push(p(LIMITATIONS, { size: 16, color: GREY, after: 200 }));
   body.push(p("DISTRIBUTION", { bold: true, size: 17, color: GREY, caps: true, after: 80 }));
-  body.push(p("Owner, Contractor, File   [PLACEHOLDER]", { size: 16, color: GREY }));
+  body.push(p(visit.distribution || "Owner, Contractor, File", { size: 16, color: GREY }));
 
   const doc = new Document({
     styles: { default: { document: { run: { font: "Calibri", size: 20 } } } },
@@ -332,11 +341,9 @@ async function buildReport(visit, recs) {
 }
 
 function reportFileName(visit) {
-  const d = new Date(visit.date);
-  const pad = n => String(n).padStart(2, "0");
-  const num = (visit.projNum || "PROJ").replace(/[^A-Za-z0-9._-]/g, "");
-  return num + "_SVR-" + String(visit.num).padStart(3, "0") + "_" +
-         d.getFullYear() + "." + pad(d.getMonth() + 1) + "." + pad(d.getDate()) + ".docx";
+  const d = new Date(visit.date),pad=n=>String(n).padStart(2,"0");
+  const project=String(visit.projNum||visit.project||"Project").normalize('NFKC').replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').slice(0,90)||'Project';
+  return project + "_SVR-" + String(visit.num).padStart(3,"0") + (visit.revision?"-R"+visit.revision:"") + "_" + d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()) + (!visit.closed||visit.editing?"_DRAFT":"") + ".docx";
 }
 
 window.SVReport = { buildReport, reportFileName };

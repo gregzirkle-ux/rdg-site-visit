@@ -5,7 +5,7 @@ const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 function fileStem(value) {
   return String(value || 'Project').normalize('NFKC').replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/[. ]+$/g, '').slice(0, 90) || 'Project';
 }
-function visitStem(v) { return fileStem(v.projNum || v.project) + '_SVR-' + String(v.num).padStart(3, '0') + '_' + dateInput(v.date); }
+function visitStem(v) { return fileStem(v.projNum || v.project) + '_SVR-' + String(v.num).padStart(3, '0') + (v.revision?'-R'+v.revision:'') + '_' + dateInput(v.date); }
 function photoFilename(v, r, index) { return visitStem(v) + '_Obs-' + String(index + 1).padStart(3, '0') + (r.blob?.type === 'image/png' ? '.png' : r.blob?.type === 'image/webp' ? '.webp' : '.jpg'); }
 function csvCell(value) {
   let text = String(value ?? '');
@@ -66,29 +66,30 @@ async function openCloud() {
     const v = snapshot.visits.find(v => v.id === visit.id);
     if (!v) throw new Error('This visit is no longer available.');
     const meta = new Map(snapshot.meta.map(m => [m.id, m]));
-    const photos = snapshot.photos.filter(p => p.visitId === v.id).sort((a,b) => a.ts-b.ts).map(p => joinMeta(p, meta.get(p.id)));
+    const photos = snapshot.photos.filter(p => p.visitId === v.id && !p.excluded).sort((a,b) => a.ts-b.ts).map(p => joinMeta(p, meta.get(p.id)));
     const missing = photos.filter(p => !p.blob?.size).length;
     if(missing)throw new Error('This visit has photos removed from the phone. Use its saved ZIP or restore the project recovery file before creating another complete archive.');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const report = missing ? null : new File([await window.SVReport.buildReport(clone(v), photos)], visitStem(v) + '_Report.docx', {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const issued=v.closed&&!v.editing?v.history?.at(-1):null;
+    const report = new File([issued?.reportData?reportBlob(issued.reportData):await window.SVReport.buildReport(clone(v), photos)], window.SVReport.reportFileName(v), {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
     const imageFiles = photos.flatMap((p, i) => p.blob?.size ? [new File([p.blob], photoFilename(v, p, i), {type:p.blob.type})] : []);
     const lines = [['Filename','Observation','Photo time','Area','Sheet / room','Tag','Note','Owner','Due','On this phone'], ...photos.map((p,i) => [photoFilename(v,p,i),i+1,new Date(p.ts).toISOString(),p.area,p.sheet,p.tag,p.note,p.owner,p.due,p.blob?.size?'Yes':'Removed'])];
     const index = new File(['\uFEFF'+lines.map(row=>row.map(csvCell).join(',')).join('\r\n')], visitStem(v)+'_Photo-Index.csv', {type:'text/csv'});
     // This copy holds only the selected project, including history required by recurring items.
     const recovery = await projectRecoveryFile(snapshot, stamp);
-    const folder = 'SVR-' + String(v.num).padStart(3, '0');
+    const folder = 'SVR-' + String(v.num).padStart(3, '0') + (v.revision?'-R'+v.revision:'');
     $('#cloudStatus').textContent = 'Packing the complete visit ZIP…';
-    const archive = await makeVisitZip(visitArchiveEntries(folder, report, imageFiles, index, recovery), folder + '.zip');
+    const archive = await makeVisitZip(visitArchiveEntries(folder, report, imageFiles, index, recovery), visitStem(v)+(v.closed&&!v.editing?'':'_DRAFT')+'.zip');
     const card = document.createElement('article'); card.className = 'itemcard';
     const heading = document.createElement('h3'); heading.textContent = archive.name + ' · ' + (archive.size / 1048576).toFixed(1) + ' MB';
     const contents = document.createElement('p'); contents.textContent = 'Includes Report, Photos (' + imageFiles.length + '), Photo-Index and Recovery folders.';
-    const save = saveFileButton([archive], 'Save ZIP to Cloud', $('#cloudStatus')); save.className = 'primary';
-    const fallback = document.createElement('button'); fallback.className = 'ghost'; fallback.textContent = 'Download ZIP';
-    fallback.onclick = () => { download(archive, archive.name); $('#cloudStatus').textContent = 'Download requested. Move the ZIP to your project folder in iCloud Drive and check the upload finishes.'; };
-    card.append(heading, contents, save, fallback); $('#cloudFiles').append(card);
-    cloudSession = {visitId:v.id, preparedAt:Date.now(), missing:0, closed:v.closed};
-    $('#cloudChecked').disabled = !v.closed;
-    $('#cloudStatus').textContent = (v.closed ? 'Ready. ' : 'Draft visit: complete it and save again for final records. ') + 'Save this ZIP in your project folder. Extract it to open the SVR folder. Keep earlier recovery files if photos were previously removed from this project.';
+    const save = saveFileButton([archive], 'Save ZIP to Files', $('#cloudStatus')); save.className = 'tile';setCard(save,'Save Package','folder','Choose your destination');
+    const fallback = document.createElement('button'); fallback.className = 'tile'; fallback.textContent = 'Download ZIP';
+    fallback.onclick = () => { download(archive, archive.name); $('#cloudStatus').textContent = 'Download requested. Move the ZIP to your project folder at your preferred destination and check the upload finishes.'; };
+    const choices=document.createElement('div');choices.className='tiles';choices.append(save,fallback);card.append(heading, contents, choices); $('#cloudFiles').append(card);
+    cloudSession = {visitId:v.id, preparedAt:Date.now(), missing:0, closed:v.closed&&!v.editing};
+    $('#cloudChecked').disabled = !v.closed||!!v.editing;
+    $('#cloudStatus').textContent = (v.closed&&!v.editing ? 'Ready. ' : 'Draft package. Mark the report issued and save again for final records. ') + 'Save this ZIP in your project folder. Extract it to open the SVR folder. Keep earlier recovery files if photos were previously removed from this project.';
 
   } catch(e) { $('#cloudStatus').textContent = 'Could not prepare files: '+e.message; }
 }
@@ -102,7 +103,7 @@ function protectedPhotoIds(visits) {
 }
 function cleanupPlan(visits, photos, now=Date.now()) {
   const protectedIds = protectedPhotoIds(visits);
-  return visits.filter(v=>v.closed && now-(v.completedAt||v.date)>=RETENTION_MS).map(v=>{
+  return visits.filter(v=>v.closed && !v.editing && now-(v.completedAt||v.date)>=RETENTION_MS).map(v=>{
     const available = photos.filter(p=>p.visitId===v.id && p.blob?.size);
     return {visit:v, removable:available.filter(p=>!protectedIds.has(p.id)), retained:available.filter(p=>protectedIds.has(p.id))};
   }).filter(row=>row.removable.length);
@@ -150,6 +151,7 @@ function remapProjectCopy(data, existing) {
   const visits=data.visits.map(v=>{
     const r={...v,id:vmap.get(v.id),projectId,items:mapItems(v.items)};
     if(v.legacyReportItems)r.legacyReportItems=mapItems(v.legacyReportItems);
+    if(v.history)r.history=v.history.map(h=>({...h,visit:{...h.visit,id:vmap.get(h.visit.id),projectId,items:mapItems(h.visit.items),...(h.visit.legacyReportItems?{legacyReportItems:mapItems(h.visit.legacyReportItems)}:{})},photos:h.photos.map(p=>({...p,id:pmap.get(p.id),visitId:vmap.get(p.visitId),itemId:items.get(p.itemId)||''}))}));
     delete r.cloudCheckedAt;return r;
   });
   return {oldProjectId:old?.id,projects:[{...source,id:projectId}],visits,
@@ -179,7 +181,7 @@ async function restoreProjectFile(file) {
 }
 function wireCloudUI() {
   on('#galCloud',openCloud);on('#doneCloud',openCloud);
-  on('#cloudClose',()=>{$('#cloudSheet').classList.remove('open');$('#cloudFiles').replaceChildren();cloudSession=null;if(visit&&!visit.closed)startCam();});
+  on('#cloudClose',()=>{$('#cloudSheet').classList.remove('open');$('#cloudFiles').replaceChildren();cloudSession=null;});
   on('#cloudChecked',async()=>{
     if(!cloudSession||cloudSession.missing||!cloudSession.closed)return;
     if(!confirm('Have you checked that the report, photos and project recovery file are saved in your cloud, with no upload pending? This records your confirmation only.'))return;

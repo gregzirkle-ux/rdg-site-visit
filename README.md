@@ -1,58 +1,96 @@
-# RDG Site Visit v13
+# RDG Site Visit v15.1
 
-The start-page STORAGE disclosure is collapsed by default and contains Open recovery file, Review phone storage, Save all app data, and Restore backup.
+A card-based field workflow for Redline staff. This is a static app for the existing GitHub/Vercel deployment; no new account or hosting service is required.
 
-## Install
-1. Save a backup of current work before updating.
-2. Replace the files in your existing GitHub repository and let Vercel redeploy. Keep the SAME website address. Include cloud.js and the new archive.js file.
-3. In the app, use Check for update. Return to Start and reopen the app. Confirm Build v13.
+## Update
 
-## Save a visit to iCloud Drive
-1. Complete the visit. Open it from Past visits and tap Save to Cloud.
-2. Tap Save ZIP to Cloud when you are ready and on Wi-Fi.
-3. On iPhone choose Save to Files, then iCloud Drive, and select your project folder. If sharing is unavailable, use Download ZIP and move it from Downloads to iCloud Drive.
-4. Check the ZIP finishes uploading in Files. Extract it to reveal the SVR folder and its contents.
-5. Download the ZIP or extracted files to your server when convenient.
+1. Save a backup of current work from the existing app.
+2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `workflow.js` and `workflow.css` and all updated files. Do not nest the folder in the repository.
+3. Let Vercel redeploy at the same website address.
+4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v15.1**.
 
-One ZIP contains everything. SVR-001.zip extracts to:
+The app keeps the same IndexedDB database, projects, visit IDs, and numbering. Do not clear website data to update. The same link does not synchronize data between people, devices, or browsers.
+
+## Visit workflow
+
+1. Enter Your Information once: name, company, phone, email. The profile is local to this device. Each new visit copies it; changing the profile does not change past reports.
+2. Select a project or choose New Project. Edit Project Details saves name, number, address, client/owner and client contact details for future visits; existing visits keep their recorded fields.
+3. Start New Visit. Report number and date are automatic. Visit Information is available here and at the end.
+4. New Visit offers Visit Information, Open Items, and Continue to Photos. Saving Visit Information returns to New Visit when opened there. Open Items Back returns to New Visit; Continue to Photos starts the camera. Review carried-forward items or continue to photos. Untouched items remain not reviewed.
+5. Take photos. Each photo is saved before the optional comment prompt. Use Save & Next, Skip Comment, or Retake. More Details contains type, area, room/sheet, responsibility, and due date.
+6. Finish Visit ends the walk and offers Additional Notes. It does not lock editing.
+7. Review & Share collects visit information, photos/comments, open items, additional notes, sharing/saving, and issuance. Take More Photos remains available on working reports.
+
+Blank photo comments remain writing space in Word. Empty general notes print “No additional comments entered.” Safety items stay first and bold red; normal app controls are neutral.
+
+## Share and save
+
+Share and Save prepares the current Word report. Share Report opens the device share menu to choose an email app. Sending occurs there. Return and choose Save Visit Package. Download Report is the fallback when native sharing is unavailable.
+
+The complete ZIP contains:
 
 | Folder | Contents |
 |---|---|
-| SVR-001/Report/ | Word report |
-| SVR-001/Photos/ | Individual photos named by observation number |
-| SVR-001/Photo-Index/ | CSV index with photo notes, time, locations and tags |
-| SVR-001/Recovery/ | Dated project recovery JSON |
+| SVR-002-R1/Report/ | Word report |
+| SVR-002-R1/Photos/ | Individual photos in the report |
+| SVR-002-R1/Photo-Index/ | CSV with photo identifiers and comments |
+| SVR-002-R1/Recovery/ | Selected-project recovery snapshot |
 
-Keep each project's ZIPs in its own project folder. Further visits use SVR-002, SVR-003, etc. If saving a revised copy of the same visit, choose deliberately whether to replace or retain the prior ZIP in Files. No archive is overwritten by the app itself.
+Filenames include the project, visit, revision, and date, such as `T01_SVR-002-R1_2026-09-13.docx` and `T01_SVR-002-R1_2026-09-13.zip`. Working reports/packages include `_DRAFT`.
 
-The recovery file contains the selected project's CURRENT available photo and visit history snapshot, including recurring-item history. It is not limited to the exported visit. Keep older recovery files if their photos have been removed locally; a newer snapshot cannot recreate those removed photos. To restore, extract the ZIP and select the JSON inside Recovery.
+Save to Files or download and choose a preferred destination. The browser does not silently pick an email app, send email, verify delivery, or upload to a cloud account. “I Checked My Saved Files” records the user's confirmation of an issued package only. Sharing, saving, and marking issued are independent actions.
 
-Draft visits can be exported; complete and save again for final records. A complete visit archive cannot be generated if its photos have been removed locally: use its earlier saved ZIP or restore its recovery file first. Empty-photo visits still include a Photos folder.
+## Issuance and revisions
 
-The app does not detect Wi-Fi or upload automatically. Your phone handles uploading after Save to Files. The optional confirmation button records YOUR check, not automatic verification.
+Mark Issued preserves an exact Word copy plus structured visit/photo metadata, completes the visit, and enables the next visit number.
 
-## Clean up phone storage
-- A notice appears when a completed visit is at least 30 days past completion and has removable photos. Older visits without a completion timestamp use the visit date.
-- Choose Review phone storage, then Save / review files first or Remove local photos.
-- Removal requires an explicit confirmation that the report, photos and recovery file are safely saved in your cloud or server. Nothing is deleted automatically.
-- Project details, visit numbering, notes and item history stay on the device. Photos supporting currently open items stay too. Retained photos can be removed later once the items are closed.
-- After removal, old observations show a clear placeholder. Use the cloud report or restore a recovery file containing those photos to rebuild the old report.
+Open a past visit from Start and choose Edit Visit. Working edits are saved and can be resumed after reopening. Each project permits one working visit/edit session at a time.
 
-## Restore a project
-From Start, expand STORAGE and choose Open recovery file and select its JSON file in Files. If the project already exists, confirmation explains that this replaces its current visits, including newer work. Save current work first. Other projects are preserved. This restores a snapshot; it does not merge newer work.
+At Finalize Edits:
 
-STORAGE also contains Save all app data and Restore backup for full-device recovery. Restore backup replaces ALL app projects. v9/v10/v11 version-1 backups remain supported. v13 files with removed-photo records require v13 or newer.
+- Save Edits retains the report/revision number for minor corrections. The earlier issued copy stays in Report History, distinguished by timestamp.
+- Create Revision increments R1, R2, etc. A reason is required. Revision number, reason, and issue date appear inside the report; filenames include the revision suffix.
+- Photo additions/removals, tracked item additions/removals, status/type/responsibility/due-date changes, and project/date changes require revisions. Users must also choose revision for changes in meaning or conclusions, even if only a few words changed.
+- Discard Working Edits restores the last issued visit and photo comments.
 
-## Photo quality
-Requests a 3840 x 2160 camera stream where supported, removes the old 1600-pixel capture cap and saves JPEGs at quality 0.92. Actual resolution depends on the device and browser. These are camera-stream captures, not guaranteed full sensor originals. Existing photos cannot gain lost detail. Word reports use smaller copies without changing stored photos.
+Revisions do not consume new visit numbers or rewrite later visits. If an older correction affects newer open items, review those items in the newer visit separately.
+
+Report History downloads exact saved Word copies even after local original photos are removed. Pre-v15.1 completed visits acquire a preserved baseline on first edit, provided their photos are present. Earlier exports were not stored as immutable copies, so original exported files cannot be recreated retroactively if their source data is gone.
+
+## Editing in Word
+
+Word edits do not return to the app. Replace the draft report in the extracted visit folder with the finished Word document, then save that folder to the server/cloud. If keeping a ZIP as the final archive, repackage the folder after replacing its report. Regeneration from the app uses app data and will not contain external Word edits. Recovery and Report History preserve only the app-authored version.
+
+Existing substantive report limitations wording is retained, with its editorial placeholder removed. Distribution is editable in Visit Information. Firm-standard wording remains an administrative review item; this update does not establish new contract language.
+
+## Storage and recovery
+
+Settings & Recovery contains project restoration, phone storage review, updates, and Advanced Device Backup. Routine storage prompts appear only when cleanup is available.
+
+Completed visits become eligible for local photo cleanup after 30 days. Nothing is removed automatically. Working edits are excluded. Photos supporting open items in the latest visit are protected. Exact issued Word copies and metadata remain.
+
+Recovery JSON contains the selected project's current records, available photos, and issued history, including photos retained for earlier issued versions. It is not limited to the selected visit. Issued Word copies increase recovery size over time. Keep older ZIPs/recovery files when original photos have been removed; newer snapshots cannot recreate those original bytes.
+
+Extract a ZIP and choose the JSON in its Recovery folder to restore. Restoration replaces the matching project's snapshot after confirmation, including any newer work, and keeps other projects. It does not merge. A saved working edit session can also be restored.
+
+Full-device backup/restore covers project records and report history. Device profile/settings remain local to each device. If current report photos are archived, use Report History for an issued Word copy or restore original recovery data before editing/rebuilding a complete package.
 
 ## Verification
-JavaScript syntax and local data checks passed, covering project recovery, exact saved photo bytes, ID remapping, preservation of other projects, cancelled restore/share, corrupt recovery rejection, legacy backups, 30-day cleanup boundaries and protection of open-item evidence. Tests use a simulated database transaction layer, not a physical iPhone.
 
-Browser preview access was denied in this session. The iPhone camera, native share sheet and iCloud handoff need a device check before field use. Try one test visit, save all groups, check the cloud files and open the project recovery file on another device before removing important local photos.
+Run with Node.js 22 or newer:
 
-For repeatable local checks with Node.js 22 or newer:
-- node tests/storage-checks.cjs
-- node tests/archive-checks.cjs
+```text
+node tests/storage-checks.cjs
+node tests/archive-checks.cjs
+node tests/workflow-checks.cjs
+node tests/integration-checks.cjs
+node tests/report-checks.cjs
+```
 
-ZIP output was also opened with an independent Python ZIP reader: checksums, Unicode filenames, folder entries and exact file bytes passed.
+Local checks cover recovery compatibility, immutable snapshots, corrections, R1/R2 sequencing, discarded edits, later-visit independence, restored snapshot references, archived Word re-export, direct share/cancel behavior, and the assembled photo-to-issue event flow using a simulated camera/database. Actual DOCX and ZIP files were generated and independently checked for content and integrity.
+
+Browser preview access was blocked by automatic approval review. Visual layout and physical-device camera, offline behavior, native email, and Files/cloud handoff have not been visually/device-tested. Before field use, check one small visit on your normal iPhone/email setup, including sharing and saving the ZIP.
+
+## v15.1 navigation update
+
+Existing SVRs opens a project-specific card list of draft and issued reports before opening a selected report. Project address and client are copied into new visits and included in Word reports when entered. Existing visit snapshots are unchanged.
