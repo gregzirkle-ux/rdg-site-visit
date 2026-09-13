@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v15.1';
+const BUILD='v15.2';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId'];
@@ -114,7 +114,7 @@ $('#projectSelect').onchange=safe(async()=>{selectedProject=Number($('#projectSe
 async function newVisit(){const p=currentProject();if(!p)return $('#addProject').click();
  const pv=(await allV()).filter(v=>v.projectId===p.id).sort((a,b)=>a.id-b.id);
  if(pv.some(v=>!v.closed||v.editing))throw new Error('Resume and complete the existing visit before starting another for this project.');
- const prev=pv.at(-1),v={schema:9,projectId:p.id,num:Math.max(0,...pv.map(v=>v.num))+1,date:Date.now(),started:Date.now(),project:p.name,projNum:p.number,projectAddress:p.address||'',client:p.client||'',clientContact:p.contact||'',clientPhone:p.phone||'',clientEmail:p.email||'',attendees:'',preparedBy:userProfile().name||prev?.preparedBy||stored('preparedBy',''),preparedCompany:userProfile().company,preparedPhone:userProfile().phone,preparedEmail:userProfile().email,distribution:'Owner, Contractor, File',generalNotes:'',revision:0,history:[],weather:'',temp:'',closed:false,exported:false,itemSeq:0,items:(prev?.items||[]).filter(i=>i.status!=='Closed').map(i=>({...clone(i),status:'Not reviewed',update:''}))};
+ const prev=pv.at(-1),v={schema:9,projectId:p.id,num:Math.max(0,...pv.map(v=>v.num))+1,date:Date.now(),started:Date.now(),project:p.name,projNum:p.number,projectAddress:p.address||'',client:p.client||'',clientContact:p.contact||'',clientPhone:p.phone||'',clientEmail:p.email||'',attendees:'',preparedBy:userProfile().name||prev?.preparedBy||stored('preparedBy',''),preparedCompany:userProfile().company,preparedPhone:userProfile().phone,preparedOfficePhone:userProfile().officePhone,preparedEmail:userProfile().email,distribution:'Owner, Contractor, File',generalNotes:'',revision:0,history:[],weather:'',temp:'',closed:false,exported:false,itemSeq:0,items:(prev?.items||[]).filter(i=>i.status!=='Closed').map(i=>({...clone(i),status:'Not reviewed',update:''}))};
  v.id=await putV(v);visit=clone(v);reviewing=false;$('#start').classList.add('hide');showSetup();
 }
 on('#startBtn',async()=>{if(busy)return;$('#startBtn').disabled=true;try{await newVisit();}finally{$('#startBtn').disabled=false;}});
@@ -220,7 +220,8 @@ function shoot(){
   captureTask = (async()=>{
     try {
       const crop = nativeZoom ? 1 : zoom;
-      const sw = v.videoWidth / crop, sh = v.videoHeight / crop;
+      const availableW=v.videoWidth/crop,availableH=v.videoHeight/crop;
+      const sw=Math.min(availableW,availableH*4/3),sh=sw*3/4;
       canvas.width = Math.max(1, Math.round(sw)); canvas.height = Math.max(1, Math.round(sh));
       ctx.drawImage(v, (v.videoWidth-sw)/2, (v.videoHeight-sh)/2, sw, sh, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",PHOTO_QUALITY));
@@ -306,12 +307,12 @@ $("#areaInput").addEventListener("keydown", e => { if(e.key === "Enter") closeAr
 /* Visit details and photo review */
 on('#projBtn',e=>{e.stopPropagation();openVisitInfo();});
 let visitInfoFromSetup=false;
-function openVisitInfo(){if(!visit)return;visitInfoFromSetup=$('#setupSheet').classList.contains('open');
- for(const [id,key] of [['vProject','project'],['vNum','projNum'],['vAtt','attendees'],['vBy','preparedBy'],['vWx','weather'],['vTemp','temp'],['vCompany','preparedCompany'],['vPhone','preparedPhone'],['vEmail','preparedEmail'],['vDistribution','distribution']]){$('#'+id).value=visit[key]||'';$('#'+id).disabled=isReadonly()||id==='vProject'||id==='vNum';}
+async function openVisitInfo(){if(!visit)return;await fillVisitContact();visitInfoFromSetup=$('#setupSheet').classList.contains('open');
+ for(const [id,key] of [['vProject','project'],['vNum','projNum'],['vAtt','attendees'],['vBy','preparedBy'],['vWx','weather'],['vTemp','temp'],['vCompany','preparedCompany'],['vPhone','preparedPhone'],['vOfficePhone','preparedOfficePhone'],['vEmail','preparedEmail'],['vDistribution','distribution']]){$('#'+id).value=visit[key]||'';$('#'+id).disabled=isReadonly()||id==='vProject'||id==='vNum';}
  $('#vDate').value=dateInput(visit.date);$('#vDate').disabled=isReadonly();
  $('#vAuto').textContent=svr(visit.num)+(isReadonly()?' · Issued report. Choose Edit Visit to make changes.':' · Photo times are recorded automatically.');$('#visSave').hidden=isReadonly();$('#vis').classList.add('open');}
 on('#visClose',()=>$('#vis').classList.remove('open'));
-on('#visSave',async()=>{editable();if(!$('#vDate').value)throw new Error('Enter the visit date.');const next=clone(visit);if($('#vDate').value!==dateInput(next.date))next.date=new Date($('#vDate').value+'T12:00:00').getTime();for(const [id,key] of [['vAtt','attendees'],['vBy','preparedBy'],['vWx','weather'],['vTemp','temp'],['vCompany','preparedCompany'],['vPhone','preparedPhone'],['vEmail','preparedEmail'],['vDistribution','distribution']])next[key]=$('#'+id).value.trim();await persistVisit(next);remember('preparedBy',visit.preparedBy);$('#vis').classList.remove('open');if(visitInfoFromSetup)showSetup();else await refreshReviewIfOpen();});
+on('#visSave',async()=>{editable();if(!$('#vDate').value)throw new Error('Enter the visit date.');const next=clone(visit);if($('#vDate').value!==dateInput(next.date))next.date=new Date($('#vDate').value+'T12:00:00').getTime();for(const [id,key] of [['vAtt','attendees'],['vBy','preparedBy'],['vWx','weather'],['vTemp','temp'],['vCompany','preparedCompany'],['vPhone','preparedPhone'],['vOfficePhone','preparedOfficePhone'],['vEmail','preparedEmail'],['vDistribution','distribution']])next[key]=$('#'+id).value.trim();await persistVisit(next);remember('preparedBy',visit.preparedBy);$('#vis').classList.remove('open');if(visitInfoFromSetup)showSetup();else await refreshReviewIfOpen();});
 on('#vPause',backToStart);
 function releaseUrls(){urls.forEach(URL.revokeObjectURL);urls=[];itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null;}if(thumbUrl){URL.revokeObjectURL(thumbUrl);thumbUrl=null;}}
 async function openGal(){await captureTask;stopCamera();const recs=await visitPhotos();urls.forEach(URL.revokeObjectURL);urls=[];$('#grid').replaceChildren();
@@ -352,7 +353,7 @@ async function paintItems(){itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];$(
  for(const item of [...visit.items].sort((a,b)=>Number(b.tag==='Safety')-Number(a.tag==='Safety'))){const card=document.createElement('article');card.className='itemcard'+(item.tag==='Safety'?' safety':'');const title=document.createElement('h3');title.textContent=(item.tag==='Safety'?'SAFETY · ':'')+item.ref+' · '+item.status;card.append(title);
  if(item.photoId){const pr=await oneP(item.photoId);if(pr?.blob){const im=document.createElement('img');im.alt='Original photo for item '+item.ref;im.src=URL.createObjectURL(pr.blob);itemUrls.push(im.src);card.append(im);}}
  for(const txt of [item.note||'Photo item with no description',item.area,[item.owner?'Owner: '+item.owner:'',item.due?'Due: '+item.due:''].filter(Boolean).join(' · '),'First noted '+svr(item.firstVisitNum)+' · '+new Date(item.firstNoted).toLocaleDateString(),item.update?'This visit: '+item.update:''])if(txt){const p=document.createElement('p');p.textContent=txt;card.append(p);}
- const chips=document.createElement('div');chips.className='chips';if(!isReadonly()){for(const status of ['Still open','Closed']){const b=document.createElement('button');b.className='tag'+(item.status===status?' on':'');b.textContent=status;b.onclick=safe(async()=>{const next=clone(visit),it=next.items.find(i=>i.id===item.id);it.status=status;it.closedAt=status==='Closed'?Date.now():null;await persistVisit(next);await paintItems();});chips.append(b);}const edit=document.createElement('button');edit.className='btn';edit.textContent='Details / update';edit.onclick=()=>openItemEditor(item.id);chips.append(edit);}card.append(chips);$('#itemsList').append(card);}
+ const chips=document.createElement('div');chips.className='chips';if(!isReadonly()){for(const status of ['Still open','Closed']){const b=document.createElement('button');b.className='tag'+(item.status===status?' on':'');b.textContent=status;b.onclick=safe(async()=>{const next=clone(visit),it=next.items.find(i=>i.id===item.id);it.status=status;it.closedAt=status==='Closed'?Date.now():null;await persistVisit(next);item.status=status;title.textContent=(item.tag==='Safety'?'SAFETY · ':'')+item.ref+' · '+status;for(const button of chips.children)button.classList.toggle('on',button.textContent===status);});chips.append(b);}const edit=document.createElement('button');edit.className='btn';edit.textContent='Details / update';edit.onclick=()=>openItemEditor(item.id);chips.append(edit);}card.append(chips);$('#itemsList').append(card);}
 }
 async function closeItems(){ $('#itemsSheet').classList.remove('open');if(itemsFromStart)showSetup();else await openReview();}
 on('#itemsClose',closeItems);on('#itemsContinue',async()=>{if(itemsFromStart){$('#itemsSheet').classList.remove('open');await returnCamera();}else await closeItems();});
@@ -365,7 +366,7 @@ on('#busyClose',()=>$('#busyWrap').classList.remove('show'));
 async function buildReport(){await captureTask;
  if(!visit.closed||visit.editing){const unreviewed=visit.items.filter(i=>i.status==='Not reviewed').length;if(unreviewed&&!confirm(unreviewed+' item(s) are not reviewed. Continue with that status shown?')){await openItems(false);return;}}
  stopCamera();$('#busyText').textContent='Preparing Word report';$('#busyClose').style.display='none';$('#busyWrap').classList.add('show');
- try{await prepareCurrentReport();$('#doneName').textContent=readyName;$('#doneNote').textContent=isReadonly()?'Share the issued Word report, then save the complete visit package.':'Draft report. You can share a draft now or mark it issued from Review & Share.';$('#done').classList.add('open');}
+ try{await prepareCurrentReport();$('#doneName').textContent=readyName;$('#doneNote').textContent=isReadonly()?'Share the issued Word report, then save the complete visit package.':'Draft report. Mark Issued here before sharing and saving your final record.';$('#reviewIssue').hidden=isReadonly();setCard('#reviewIssue',visit.editing?'Finalize Edits':'Mark Issued','check','Preserve the final report before sharing');$('#done').classList.add('open');}
  catch(e){showError(e);}finally{$('#busyWrap').classList.remove('show');}
 }
 on('#galBuild',async()=>{if(visit.walkFinishedAt)await openReview();else await finishWalk();});on('#galExport',buildReport);

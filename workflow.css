@@ -44,3 +44,9 @@ input:focus,textarea:focus,select:focus{border-color:#777;box-shadow:0 0 0 3px #
 @media(min-width:760px){.masthead{justify-content:center}.masthead .svr{margin-left:24px}.topbar{max-width:720px;margin:auto}.dock{max-width:720px;margin:auto}.sheethead{padding-left:max(20px,calc((100vw - 684px)/2));padding-right:max(20px,calc((100vw - 684px)/2))}.tile{min-height:150px}}
 @media(max-width:350px){.tiles{gap:9px}.tile,.tile.wide{padding:13px;font-size:14px;min-height:136px}.chip{padding:8px;font-size:11px}.masthead .wm{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.sheet,.areasheet{transition:none}}
+
+/* The visible camera image and saved crop share the same centered 4:3 bounds. */
+#camwrap{inset:auto;left:50%;top:calc(50% - 45px);transform:translate(-50%,-50%);width:min(calc(100vw - 24px),calc((100dvh - 260px)*4/3));height:auto;aspect-ratio:4/3;border:2px solid #fff;border-radius:8px;box-sizing:content-box}
+#cam{display:block;object-fit:cover}
+#captureGuide{position:absolute;left:0;right:0;bottom:0;padding:8px;background:rgba(0,0,0,.65);color:#fff;text-align:center;font-size:12px;pointer-events:none}
+.itemcard img{aspect-ratio:4/3;object-fit:contain}

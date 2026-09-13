@@ -1,4 +1,4 @@
-# RDG Site Visit v15.1
+# RDG Site Visit v15.2
 
 A card-based field workflow for Redline staff. This is a static app for the existing GitHub/Vercel deployment; no new account or hosting service is required.
 
@@ -7,7 +7,7 @@ A card-based field workflow for Redline staff. This is a static app for the exis
 1. Save a backup of current work from the existing app.
 2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `workflow.js` and `workflow.css` and all updated files. Do not nest the folder in the repository.
 3. Let Vercel redeploy at the same website address.
-4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v15.1**.
+4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v15.2**.
 
 The app keeps the same IndexedDB database, projects, visit IDs, and numbering. Do not clear website data to update. The same link does not synchronize data between people, devices, or browsers.
 
@@ -55,7 +55,7 @@ At Finalize Edits:
 
 Revisions do not consume new visit numbers or rewrite later visits. If an older correction affects newer open items, review those items in the newer visit separately.
 
-Report History downloads exact saved Word copies even after local original photos are removed. Pre-v15.1 completed visits acquire a preserved baseline on first edit, provided their photos are present. Earlier exports were not stored as immutable copies, so original exported files cannot be recreated retroactively if their source data is gone.
+Report History downloads exact saved Word copies even after local original photos are removed. Pre-v15.2 completed visits acquire a preserved baseline on first edit, provided their photos are present. Earlier exports were not stored as immutable copies, so original exported files cannot be recreated retroactively if their source data is gone.
 
 ## Editing in Word
 
@@ -91,6 +91,16 @@ Local checks cover recovery compatibility, immutable snapshots, corrections, R1/
 
 Browser preview access was blocked by automatic approval review. Visual layout and physical-device camera, offline behavior, native email, and Files/cloud handoff have not been visually/device-tested. Before field use, check one small visit on your normal iPhone/email setup, including sharing and saving the ZIP.
 
-## v15.1 navigation update
+## v15.2 navigation update
 
 Existing SVRs opens a project-specific card list of draft and issued reports before opening a selected report. Project address and client are copied into new visits and included in Word reports when entered. Existing visit snapshots are unchanged.
+
+## v15.2 report and field update
+
+Your Information now includes separate office and direct/mobile phones. Company defaults to Redline Design Group and office phone to 704-377-2990, including previously saved blank profiles. Enter your name, direct/mobile phone, and email once. New visits copy the profile. Missing contact fields in working visits are filled when opening Visit Information, reviewing, or generating a report; issued snapshots remain unchanged.
+
+General Notes and Observations replaces Additional Notes and is available before and after the walk. Existing notes are retained. Mark Issued / Finalize Edits is on Share and Save and refreshes the prepared file to the issued version immediately. Separate Word/ZIP downloads remain under Other save options for failed or unavailable native sharing. Save Visit Package is still the complete archive.
+
+The camera displays a centered 4:3 landscape frame and saves that crop at available resolution, including when held upright and using zoom. Compose the entire observation inside the frame. Report images fit within 2.75 by 2.0625 inches; existing portrait photos are fitted without cropping. Letter pages with 0.75-inch margins provide 7 by 9.5 inches of usable area. Photo and text columns are 3 and 4 inches wide, with editable bordered comments cells. Photo pages target three rows, or two for longer comments. Word can use additional pages for very long text; nothing is clipped to enforce a count. Project/contact information and general notes come first, then safety-first photo observations.
+
+Status buttons update their own open-item card without rebuilding the list, preserving scroll and focus. Automated checks cover blank profile defaults, office phone flow, portrait camera crop ratio, issued-file refresh, and retained item cards. A six-image report with blank comments, longer comments, and a legacy portrait image was generated and all rendered pages visually inspected. Physical camera framing, phone layout and sharing still require an iPhone test.

@@ -45,13 +45,13 @@ function saveFileButton(files, label, status) {
         button.disabled = true;
         navigator.share({files}).then(() => {
           status.textContent = 'Files handed to the selected app. Check your destination and upload status in Files; this app cannot verify cloud storage.';
-        }).catch(e => { if (e.name !== 'AbortError') status.textContent = 'Sharing failed: ' + e.message + '. Use Download ZIP below.'; })
+        }).catch(e => { if (e.name !== 'AbortError') status.textContent = 'Sharing failed: ' + e.message + '. Open Other save options for Download ZIP.'; })
           .finally(() => { button.disabled = false; });
       } else if (files.length === 1) {
         download(files[0], files[0].name);
         status.textContent = 'Download requested. Move the file from Downloads to your cloud folder and check it there.';
       } else status.textContent = 'This browser cannot share this batch. Save the files individually below.';
-    } catch (e) { button.disabled = false; status.textContent = 'Could not share: ' + e.message + '. Use Download ZIP below.'; }
+    } catch (e) { button.disabled = false; status.textContent = 'Could not share: ' + e.message + '. Open Other save options for Download ZIP.'; }
   };
   return button;
 }
@@ -85,8 +85,9 @@ async function openCloud() {
     const contents = document.createElement('p'); contents.textContent = 'Includes Report, Photos (' + imageFiles.length + '), Photo-Index and Recovery folders.';
     const save = saveFileButton([archive], 'Save ZIP to Files', $('#cloudStatus')); save.className = 'tile';setCard(save,'Save Package','folder','Choose your destination');
     const fallback = document.createElement('button'); fallback.className = 'tile'; fallback.textContent = 'Download ZIP';
+    const alternatives=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Other save options';alternatives.append(summary,fallback);
     fallback.onclick = () => { download(archive, archive.name); $('#cloudStatus').textContent = 'Download requested. Move the ZIP to your project folder at your preferred destination and check the upload finishes.'; };
-    const choices=document.createElement('div');choices.className='tiles';choices.append(save,fallback);card.append(heading, contents, choices); $('#cloudFiles').append(card);
+    const choices=document.createElement('div');choices.className='tiles';choices.append(save,alternatives);card.append(heading, contents, choices); $('#cloudFiles').append(card);
     cloudSession = {visitId:v.id, preparedAt:Date.now(), missing:0, closed:v.closed&&!v.editing};
     $('#cloudChecked').disabled = !v.closed||!!v.editing;
     $('#cloudStatus').textContent = (v.closed&&!v.editing ? 'Ready. ' : 'Draft package. Mark the report issued and save again for final records. ') + 'Save this ZIP in your project folder. Extract it to open the SVR folder. Keep earlier recovery files if photos were previously removed from this project.';

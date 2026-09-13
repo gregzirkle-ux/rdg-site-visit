@@ -4,7 +4,7 @@
 const D = () => window.docx;
 
 const TW_PAGE  = 10080;  /* usable width in twips: letter 12240 less the 0.75in margins */
-const TW_PHOTO = 4100;
+const TW_PHOTO = 4320;
 const TW_TEXT  = TW_PAGE - TW_PHOTO;
 const PHOTO_PX = 264;    /* 2.75in at 96dpi */
 
@@ -77,8 +77,8 @@ async function imageBits(blob) {
     ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
     const copy = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
     if (!copy || !copy.size) throw new Error("Photo conversion failed");
-    return { buf: await copy.arrayBuffer(), w: PHOTO_PX,
-      h: Math.round(PHOTO_PX * im.naturalHeight / im.naturalWidth) };
+    const fit=Math.min(PHOTO_PX/im.naturalWidth,198/im.naturalHeight);
+    return {buf:await copy.arrayBuffer(),w:Math.round(im.naturalWidth*fit),h:Math.round(im.naturalHeight*fit)};
   } finally { URL.revokeObjectURL(url); }
 }
 
@@ -153,8 +153,10 @@ function headerTable(visit, times) {
     ["Weather",      [visit.weather, visit.temp].filter(Boolean).join(", ")],
     ["Present",      visit.attendees || ""],
     ["Prepared By",  visit.preparedBy || ""],
-    ["Company", visit.preparedCompany || ""],
-    ["Contact", [visit.preparedPhone, visit.preparedEmail].filter(Boolean).join(" | ")],
+    ["Company", visit.preparedCompany || "Redline Design Group"],
+    ["Office Phone", visit.preparedOfficePhone || "704-377-2990"],
+    ["Direct / Mobile", visit.preparedPhone || ""],
+    ["Email", visit.preparedEmail || ""],
     ["Report Status", !visit.closed || visit.editing ? "DRAFT" : "Issued"],
     ...(visit.issuedAt ? [["Issued", new Date(visit.issuedAt).toLocaleString()]] : []),
     ...(visit.revision ? [["Revision", "R" + visit.revision + (visit.revisionReason ? " | " + visit.revisionReason : "")]] : [])
@@ -207,7 +209,7 @@ async function observationTable(recs) {
     }
 
     rows.push(new TableRow({
-      cantSplit: false,
+      cantSplit: (r.note||"").length < 1800,
       children: [
         new TableCell({
           width: { size: TW_PHOTO, type: WidthType.DXA },
@@ -223,8 +225,8 @@ async function observationTable(recs) {
         }),
         new TableCell({
           width: { size: TW_TEXT, type: WidthType.DXA },
-          borders: noBorders,
-          margins: { top: 120, bottom: 240 },
+          borders: {top:{style:"single",size:4,color:"D4D8DC"},bottom:{style:"single",size:4,color:"D4D8DC"},left:{style:"single",size:4,color:"D4D8DC"},right:{style:"single",size:4,color:"D4D8DC"}},
+          margins: { top: 120, bottom: 120, left:160, right:160 },
           verticalAlign: VerticalAlign.TOP,
           children: right
         })
@@ -305,13 +307,21 @@ async function buildReport(visit, recs) {
   if (safetyPhotos.length || safetyItems.length) {
     body.push(p("SAFETY ITEMS — PRIORITY REVIEW", {bold:true, color:RED, size:28, after:160}));
     if (safetyItems.length) body.push(openItemsTable(safetyItems.map(it => ({...it,tag:"Safety"}))));
-    if (safetyPhotos.length) body.push(await observationTable(safetyPhotos));
+    if (safetyPhotos.length) body.push(p("Safety photo observations: " + safetyPhotos.map(r=>String(r.observationNumber).padStart(3,"0")).join(", ") + ". Listed first in Photo Observations.",{bold:true,color:RED,after:120}));
+    
     body.push(redRule());
   }
-  body.push(p("ADDITIONAL NOTES", {bold:true,size:20,color:GREY,after:100}));
-  body.push(p(visit.generalNotes || "No additional comments entered.", {after:200}));
-  body.push(p("OBSERVATIONS", {bold:true,size:20,color:GREY,after:160}));
-  if (otherPhotos.length) body.push(await observationTable(otherPhotos));
+  body.push(p("GENERAL NOTES AND OBSERVATIONS", {bold:true,size:20,color:GREY,after:100}));
+  body.push(p(visit.generalNotes || "No general notes entered.", {after:200}));
+  
+  if (sorted.length) {
+    const ordered=[...safetyPhotos,...otherPhotos];
+    for(let i=0;i<ordered.length;){
+      const count=ordered.slice(i,i+3).some(r=>(r.note||" ").length>450)?2:3;
+      body.push(new Paragraph({pageBreakBefore:true,children:[new TextRun({text:"PHOTO OBSERVATIONS",bold:true,size:22})],spacing:{after:120}}));
+      body.push(await observationTable(ordered.slice(i,i+count)));i+=count;
+    }
+  }
   else body.push(p(sorted.length ? "All photographs are listed in the safety section above." : "No photographs recorded during this visit."));
   if (otherItems.length) {
     body.push(p("ITEM STATUS", {bold:true,size:20,color:GREY,before:240,after:160}));

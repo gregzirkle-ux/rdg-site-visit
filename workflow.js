@@ -1,6 +1,6 @@
 'use strict';
 /* Workflow state is saved on each visit; issued versions never read later metadata. */
-let captureComment=false,galleryFromReview=false,projectEditing=false,profileFirstUse=false,notesFromFinish=false;
+let captureComment=false,galleryFromReview=false,projectEditing=false,profileFirstUse=false,notesFromFinish=false,notesFromSetup=false;
 const FLOW_ICONS={
  camera:'<path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/>',
  arrow:'<path d="M4 12h16M14 6l6 6-6 6"/>',check:'<circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/>',
@@ -15,8 +15,9 @@ function setCard(selector,label,icon='notes',sub=''){
  if(sub){const text=document.createElement('span');text.className='sub';text.textContent=sub;el.append(text);}
 }
 function visitLabel(v){return 'SVR-'+String(v.num).padStart(3,'0')+(v.revision?'-R'+v.revision:'');}
-function userProfile(){return {name:'',company:'Redline Design Group',phone:'',email:'',...stored('userProfile',{})};}
-function openProfile(first=false){profileFirstUse=first;const p=userProfile();for(const key of ['Name','Company','Phone','Email'])$('#profile'+key).value=p[key.toLowerCase()];$('#profileClose').textContent=first?'Later':'Back';$('#profileStatus').textContent='';$('#profileSheet').classList.add('open');}
+function userProfile(){const p={name:'',phone:'',email:'',...stored('userProfile',{})};return {...p,company:p.company||'Redline Design Group',officePhone:p.officePhone||'704-377-2990'};}
+async function fillVisitContact(){if(!visit||isReadonly())return;const p=userProfile(),next=clone(visit);let changed=false;for(const [key,source] of [['preparedBy','name'],['preparedCompany','company'],['preparedPhone','phone'],['preparedEmail','email'],['preparedOfficePhone','officePhone']])if(!next[key]&&p[source]){next[key]=p[source];changed=true;}if(changed)await persistVisit(next);}
+function openProfile(first=false){profileFirstUse=first;const p=userProfile();for(const key of ['Name','Company','Phone','Email','OfficePhone'])$('#profile'+key).value=p[key==='OfficePhone'?'officePhone':key.toLowerCase()];$('#profileClose').textContent=first?'Later':'Back';$('#profileStatus').textContent='';$('#profileSheet').classList.add('open');}
 function openProjectForm(edit){projectEditing=edit;const p=edit?currentProject():null;$('#projectName').value=p?.name||'';$('#projectNumber').value=p?.number||'';$('#projectFormTitle').textContent=edit?'Edit Project Details':'New Project';for(const k of ['Address','Client','Contact','Phone','Email'])$('#project'+k).value=p?.[k.toLowerCase()]||'';$('#projectHelp').textContent=edit?'Changes apply to future visits. Existing visits retain their recorded project information.':'Create a project to keep its visits and open items together.';$('#projectSheet').classList.add('open');}
 function showSetup(){stopCamera();$('#setupTitle').textContent=visit.project+' · '+visitLabel(visit);setCard('#setupItems','Open Items','notes',visit.items.filter(i=>i.status!=='Closed').length+' carried-forward items · Review now or later');$('#setupSheet').classList.add('open');}
 function hideWorkSheets(){for(const id of ['#existingSheet','#setupSheet','#reviewSheet','#gal','#done','#notesSheet','#itemsSheet','#issueSheet','#historySheet'])$(id).classList.remove('open');}
@@ -25,7 +26,7 @@ async function openCaptured(id){captureComment=true;await openDet(id,count);}
 async function finishWalk(){await captureTask;editable();stopCamera();const next=clone(visit);next.walkFinishedAt=next.walkFinishedAt||Date.now();await persistVisit(next);await openReview();openNotes(true);}
 async function refreshReviewIfOpen(){if($('#reviewSheet').classList.contains('open'))await openReview();}
 async function openReview(){
- await captureTask;stopCamera();captureComment=false;galleryFromReview=true;
+ await captureTask;await fillVisitContact();stopCamera();captureComment=false;galleryFromReview=true;
  for(const id of ['#gal','#setupSheet','#done'])$(id).classList.remove('open');
  const photos=await visitPhotos(),unreviewed=visit.items.filter(i=>i.status==='Not reviewed').length;
  $('#reviewProject').textContent=visit.project+(visit.projNum?' · '+visit.projNum:'');$('#reviewTitle').textContent=visitLabel(visit)+' · '+new Date(visit.date).toLocaleDateString();
@@ -33,19 +34,20 @@ async function openReview(){
  setCard('#reviewInfo','Visit Information','info',visit.attendees?'Details entered':'Date, attendees, weather');
  setCard('#reviewPhotos','Photos & Comments','camera',photos.length+' photos · '+photos.filter(p=>!!p.note).length+' comments');
  setCard('#reviewItems','Open Items','notes',visit.items.filter(i=>i.status!=='Closed').length+' open'+(unreviewed?' · '+unreviewed+' not reviewed':''));
- setCard('#reviewNotes','Additional Notes','edit',visit.generalNotes?'Notes entered':'Optional summary');
+ setCard('#reviewNotes','General Notes and Observations','edit',visit.generalNotes?'Notes entered':'Visit summary and general conditions');
  $('#reviewEdit').hidden=!isReadonly();$('#reviewCamera').hidden=isReadonly();$('#reviewIssue').hidden=isReadonly();
  setCard('#reviewIssue',visit.editing?'Finalize Edits':'Mark Issued','check',visit.editing?'Save edits or create revision':'Preserve this report');
  $('#reviewHistory').hidden=!(visit.history?.length);
  $('#reviewWord').textContent='Word edits stay in Word. Save your finished document in the visit folder after editing.';
  $('#reviewSheet').classList.add('open');
 }
-function openNotes(fromFinish=false){notesFromFinish=fromFinish;$('#visitNotes').value=visit.generalNotes||'';$('#visitNotes').disabled=isReadonly();$('#notesSave').hidden=isReadonly();$('#notesSkip').hidden=isReadonly();setCard('#notesSkip',fromFinish?'Skip for Now':'Back to Visit','arrow');$('#notesSheet').classList.add('open');}
-async function leaveNotes(){if(!isReadonly()&&$('#visitNotes').value!==(visit.generalNotes||'')){const next=clone(visit);next.generalNotes=$('#visitNotes').value.trim();await persistVisit(next);}$('#notesSheet').classList.remove('open');await openReview();}
+function openNotes(fromFinish=false){notesFromSetup=$('#setupSheet').classList.contains('open');notesFromFinish=fromFinish;$('#visitNotes').value=visit.generalNotes||'';$('#visitNotes').disabled=isReadonly();$('#notesSave').hidden=isReadonly();$('#notesSkip').hidden=isReadonly();setCard('#notesSkip',fromFinish?'Skip for Now':'Back to Visit','arrow');$('#notesSheet').classList.add('open');}
+async function leaveNotes(){if(!isReadonly()&&$('#visitNotes').value!==(visit.generalNotes||'')){const next=clone(visit);next.generalNotes=$('#visitNotes').value.trim();await persistVisit(next);}$('#notesSheet').classList.remove('open');if(notesFromSetup)showSetup();else await openReview();}
 function snapshotVisit(v){const out=clone(v);delete out.history;delete out.editing;delete out.cloudCheckedAt;delete out.localPhotosRemovedAt;return out;}
 function snapshotPhoto(r){const out={id:r.id,visitId:r.visitId,ts:r.ts};for(const k of NOTE_KEYS)out[k]=r[k]||'';return out;}
 function reportBlob(data){const bytes=Uint8Array.from(atob(data.split(',')[1]),c=>c.charCodeAt(0));return new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});}
 async function prepareCurrentReport(){
+ await fillVisitContact();
  const latest=visit.history?.at(-1);
  if(isReadonly()&&latest?.reportData){readyBlob=reportBlob(latest.reportData);readyName=latest.filename;return;}
  const photos=await visitPhotos();if(photos.some(p=>!p.blob?.size))throw new Error('Original photos are archived. Open Report History for an issued Word copy, or restore the project recovery file to rebuild this report.');
@@ -83,7 +85,7 @@ async function openIssue(){
  $('#issueSheet').classList.add('open');
 }
 async function issueReport(mode){
- editable();await captureTask;const photos=await visitPhotos();if(photos.some(p=>!p.blob?.size))throw new Error('Restore the project recovery file before issuing a report with archived photos.');
+ await fillVisitContact();editable();await captureTask;const photos=await visitPhotos();if(photos.some(p=>!p.blob?.size))throw new Error('Restore the project recovery file before issuing a report with archived photos.');
  const reasons=visit.editing?majorEditReasons(visit.history.at(-1),visit,photos):[];
  if(mode==='edits'&&reasons.length)throw new Error('These changes require a revision.');
  const reason=$('#issueReason').value.trim();if(mode==='revision'&&!reason)throw new Error('Enter a short revision reason.');
@@ -96,7 +98,7 @@ async function issueReport(mode){
   next.revisionReason=mode==='revision'?reason:next.revisionReason||'';next.correctionReason=mode==='edits'?reason:'';
   next.closed=true;next.editing=false;next.issuedAt=Date.now();next.completedAt=next.completedAt||next.issuedAt;delete next.cloudCheckedAt;
   next.history=next.history||[];const h=await preservedVersion(next,photos,mode==='revision'?'Revision':mode==='edits'?'Correction':'Original issue',reason);next.history.push(h);
-  await persistVisit(next);readyBlob=reportBlob(h.reportData);readyName=h.filename;reviewing=true;$('#issueSheet').classList.remove('open');await openReview();
+  await persistVisit(next);readyBlob=reportBlob(h.reportData);readyName=h.filename;reviewing=true;$('#issueSheet').classList.remove('open');await buildReport();
  }finally{$('#busyWrap').classList.remove('show');}
 }
 async function discardWorkingEdits(){
@@ -107,7 +109,7 @@ async function discardWorkingEdits(){
   tx.objectStore('visits').put(next);const q=tx.objectStore('photos').index('visitId').getAll(visit.id);
   q.onsuccess=()=>q.result.forEach(p=>tx.objectStore('photos').put({...p,excluded:!ids.has(p.id)}));
   for(const p of baseline.photos){const m={id:p.id};for(const k of NOTE_KEYS)m[k]=p[k]||'';tx.objectStore('meta').put(m);}
- });visit=next;readyBlob=null;$('#issueSheet').classList.remove('open');await openReview();
+ });visit=next;readyBlob=null;$('#issueSheet').classList.remove('open');await buildReport();
 }
 async function showHistory(){
  $('#historyList').replaceChildren();for(const h of [...(visit.history||[])].reverse()){
@@ -129,11 +131,11 @@ function validateReportHistory(v,maps){
 }
 function wireWorkflow(){
  on('#profileBtn',()=>openProfile());on('#profileClose',()=>$('#profileSheet').classList.remove('open'));
- $('#profileForm').onsubmit=e=>{e.preventDefault();return safe(async()=>{const p={};for(const key of ['Name','Company','Phone','Email'])p[key.toLowerCase()]=$('#profile'+key).value.trim();if(!p.name)throw new Error('Enter your name.');remember('userProfile',p);remember('preparedBy',p.name);$('#profileSheet').classList.remove('open');})()};
+ $('#profileForm').onsubmit=e=>{e.preventDefault();return safe(async()=>{const p={};for(const key of ['Name','Company','Phone','Email','OfficePhone'])p[key==='OfficePhone'?'officePhone':key.toLowerCase()]=$('#profile'+key).value.trim();if(!p.name)throw new Error('Enter your name.');p.company=p.company||'Redline Design Group';p.officePhone=p.officePhone||'704-377-2990';remember('userProfile',p);remember('preparedBy',p.name);$('#profileSheet').classList.remove('open');})()};
  on('#projectClose',()=>$('#projectSheet').classList.remove('open'));
  $('#projectForm').onsubmit=e=>{e.preventDefault();return safe(async()=>{const name=$('#projectName').value.trim(),number=$('#projectNumber').value.trim();if(!name)throw new Error('Enter a project name.');const key=number?'number:'+number.toLowerCase():'name:'+name.toLowerCase(),old=projectEditing?currentProject():null;
  if(projects.some(p=>p.key===key&&p.id!==old?.id))throw new Error('That project already exists. Select it on Start.');const details={};for(const k of ['Address','Client','Contact','Phone','Email'])details[k.toLowerCase()]=$('#project'+k).value.trim();selectedProject=await put('projects',{...(old||{}),name,number,key,...details});$('#projectSheet').classList.remove('open');await loadState();})()};
- on('#existingBtn',async()=>{await loadState();$('#existingProject').textContent=currentProject()?.name||'Select a project on Start.';$('#existingSheet').classList.add('open');});on('#existingBack',()=>$('#existingSheet').classList.remove('open'));on('#setupItems',()=>openItems(true));on('#setupInfo',openVisitInfo);on('#setupBack',backToStart);on('#setupContinue',async()=>{$('#setupSheet').classList.remove('open');await returnCamera();});
+ on('#existingBtn',async()=>{await loadState();$('#existingProject').textContent=currentProject()?.name||'Select a project on Start.';$('#existingSheet').classList.add('open');});on('#existingBack',()=>$('#existingSheet').classList.remove('open'));on('#setupNotes',()=>openNotes());on('#setupItems',()=>openItems(true));on('#setupInfo',openVisitInfo);on('#setupBack',backToStart);on('#setupContinue',async()=>{$('#setupSheet').classList.remove('open');await returnCamera();});
  on('#reviewBack',backToStart);on('#reviewHome',backToStart);on('#reviewInfo',openVisitInfo);on('#reviewPhotos',async()=>{galleryFromReview=true;await openGal();});on('#reviewItems',()=>openItems(false));on('#reviewNotes',()=>openNotes());on('#reviewCamera',returnCamera);
  on('#reviewShare',buildReport);on('#reviewIssue',openIssue);on('#reviewEdit',beginIssuedEdits);on('#reviewHistory',showHistory);
  on('#notesSave',leaveNotes);on('#notesBack',leaveNotes);on('#notesSkip',leaveNotes);
@@ -147,7 +149,7 @@ function wireWorkflow(){
   const file=new File([readyBlob],readyName,{type:readyBlob.type});
   if(!navigator.canShare?.({files:[file]})){download(readyBlob,readyName);$('#doneNote').textContent='Report download requested. Attach it in your email app, then choose Save Visit Package.';return;}
   $('#doneShare').disabled=true;
-  try{navigator.share({files:[file],title:readyName}).then(()=>{$('#doneNote').textContent='Report handed to your selected app. Sending is handled there. Next: Save Visit Package.';$('#doneCloud').focus();}).catch(e=>{$('#doneNote').textContent=e.name==='AbortError'?'Sharing canceled. You can try again or save without emailing.':'Could not share. Use Download Report, then attach it in your email app.';}).finally(()=>$('#doneShare').disabled=false);}catch(e){$('#doneShare').disabled=false;showError(e);}
+  try{navigator.share({files:[file],title:readyName}).then(()=>{$('#doneNote').textContent='Report handed to your selected app. Sending is handled there. Next: Save Visit Package.';$('#doneCloud').focus();}).catch(e=>{$('#doneNote').textContent=e.name==='AbortError'?'Sharing canceled. You can try again or save without emailing.':'Could not share. Open Other save options for Download Report, then attach it in your email app.';}).finally(()=>$('#doneShare').disabled=false);}catch(e){$('#doneShare').disabled=false;showError(e);}
  };
  on('#cloudDone',async()=>{$('#cloudSheet').classList.remove('open');await openReview();});
 }
