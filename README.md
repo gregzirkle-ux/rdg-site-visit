@@ -1,4 +1,4 @@
-# RDG Site Visit v15.2
+# RDG Site Visit v16
 
 A card-based field workflow for Redline staff. This is a static app for the existing GitHub/Vercel deployment; no new account or hosting service is required.
 
@@ -7,7 +7,7 @@ A card-based field workflow for Redline staff. This is a static app for the exis
 1. Save a backup of current work from the existing app.
 2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `workflow.js` and `workflow.css` and all updated files. Do not nest the folder in the repository.
 3. Let Vercel redeploy at the same website address.
-4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v15.2**.
+4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v16**.
 
 The app keeps the same IndexedDB database, projects, visit IDs, and numbering. Do not clear website data to update. The same link does not synchronize data between people, devices, or browsers.
 
@@ -85,6 +85,7 @@ node tests/archive-checks.cjs
 node tests/workflow-checks.cjs
 node tests/integration-checks.cjs
 node tests/report-checks.cjs
+node tests/layout-checks.cjs
 ```
 
 Local checks cover recovery compatibility, immutable snapshots, corrections, R1/R2 sequencing, discarded edits, later-visit independence, restored snapshot references, archived Word re-export, direct share/cancel behavior, and the assembled photo-to-issue event flow using a simulated camera/database. Actual DOCX and ZIP files were generated and independently checked for content and integrity.
@@ -101,6 +102,27 @@ Your Information now includes separate office and direct/mobile phones. Company 
 
 General Notes and Observations replaces Additional Notes and is available before and after the walk. Existing notes are retained. Mark Issued / Finalize Edits is on Share and Save and refreshes the prepared file to the issued version immediately. Separate Word/ZIP downloads remain under Other save options for failed or unavailable native sharing. Save Visit Package is still the complete archive.
 
-The camera displays a centered 4:3 landscape frame and saves that crop at available resolution, including when held upright and using zoom. Compose the entire observation inside the frame. Report images fit within 2.75 by 2.0625 inches; existing portrait photos are fitted without cropping. Letter pages with 0.75-inch margins provide 7 by 9.5 inches of usable area. Photo and text columns are 3 and 4 inches wide, with editable bordered comments cells. Photo pages target three rows, or two for longer comments. Word can use additional pages for very long text; nothing is clipped to enforce a count. Project/contact information and general notes come first, then safety-first photo observations.
+Camera and report layout behavior changed in v16; see below. Project/contact information and general notes come first, then safety-first photo observations.
 
 Status buttons update their own open-item card without rebuilding the list, preserving scroll and focus. Automated checks cover blank profile defaults, office phone flow, portrait camera crop ratio, issued-file refresh, and retained item cards. A six-image report with blank comments, longer comments, and a legacy portrait image was generated and all rendered pages visually inspected. Physical camera framing, phone layout and sharing still require an iPhone test.
+
+## v16 camera, photo selection and report layouts
+
+**Camera.** The live view fills the screen and shows the whole frame. The saved photo matches the preview with no crop; only digital zoom narrows it. The comment screen still opens after each photo.
+
+**Rotation.** The app follows the phone's orientation. In landscape the camera controls sit on the left and the shutter on the right, and photos save in landscape. If the app does not rotate after updating, turn off Portrait Orientation Lock in Control Center. iOS may keep the old setting until the home screen icon is reinstalled. Removing a home screen web app deletes its data, so choose Save All App Data first and restore afterward.
+
+**Photo selection.** In Photos & Comments, each thumbnail has a check. Tap it to leave that photo out of the Word report; Include all brings every photo back. The photo screen also has an Include in report checkbox. All photos are included by default. Report numbering counts only included photos. The ZIP keeps every photo: report photos are named Obs, the others Extra, and the Photo Index CSV has an In report column. Changing which photos are in an issued report requires a revision.
+
+**Report layout.** Review & Share has a Report Layout tile. The choice is saved on the visit and becomes the default for new visits on this device.
+
+| Layout | Arrangement |
+|---|---|
+| Photo left, comment right | Three photos per page in matching rows. Photos fit within 3.3 by 2.5 inches. |
+| Large photos, fitted to shape | Landscape photos fit within 4.55 by 3.42 inches with the comment beside them. Two portrait photos taken back to back pair side by side with comments below. Pages hold two or three photos. |
+
+Photos are scaled to fit and never cropped. Safety photos still come first. Page one now holds the visit information, safety summary, general notes, item status, limitations and distribution; every photo page starts on a new page with its own heading. Very long comments can still push a row to the next page.
+
+**Start.** New Project is a red button.
+
+**Checks.** All earlier checks pass. New checks cover both layouts, landscape, portrait and wide photos, photos left out of the report, the report layout choice, the include toggle and Include all, and the revision rule. Both layouts were rendered with mixed photo shapes and inspected. Screens were checked in portrait and landscape with a simulated camera. Real iPhone rotation, camera resolution and sharing still need a device test.

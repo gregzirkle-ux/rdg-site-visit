@@ -7,6 +7,13 @@ function fileStem(value) {
 }
 function visitStem(v) { return fileStem(v.projNum || v.project) + '_SVR-' + String(v.num).padStart(3, '0') + (v.revision?'-R'+v.revision:'') + '_' + dateInput(v.date); }
 function photoFilename(v, r, index) { return visitStem(v) + '_Obs-' + String(index + 1).padStart(3, '0') + (r.blob?.type === 'image/png' ? '.png' : r.blob?.type === 'image/webp' ? '.webp' : '.jpg'); }
+/* Report photos keep their observation numbers; photos left out of the report are named Extra. */
+function photoNames(v, photos) {
+  let obs = 0, extra = 0;
+  return photos.map(r => r.omit
+    ? { name: visitStem(v) + '_Extra-' + String(++extra).padStart(2, '0') + (r.blob?.type === 'image/png' ? '.png' : r.blob?.type === 'image/webp' ? '.webp' : '.jpg'), obs: '' }
+    : { name: photoFilename(v, r, obs), obs: ++obs });
+}
 function csvCell(value) {
   let text = String(value ?? '');
   if (/^[\s]*[=+@-]/.test(text)) text = "'" + text;
@@ -72,8 +79,9 @@ async function openCloud() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const issued=v.closed&&!v.editing?v.history?.at(-1):null;
     const report = new File([issued?.reportData?reportBlob(issued.reportData):await window.SVReport.buildReport(clone(v), photos)], window.SVReport.reportFileName(v), {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-    const imageFiles = photos.flatMap((p, i) => p.blob?.size ? [new File([p.blob], photoFilename(v, p, i), {type:p.blob.type})] : []);
-    const lines = [['Filename','Observation','Photo time','Area','Sheet / room','Tag','Note','Owner','Due','On this phone'], ...photos.map((p,i) => [photoFilename(v,p,i),i+1,new Date(p.ts).toISOString(),p.area,p.sheet,p.tag,p.note,p.owner,p.due,p.blob?.size?'Yes':'Removed'])];
+    const names = photoNames(v, photos);
+    const imageFiles = photos.flatMap((p, i) => p.blob?.size ? [new File([p.blob], names[i].name, {type:p.blob.type})] : []);
+    const lines = [['Filename','Observation','In report','Photo time','Area','Sheet / room','Tag','Note','Owner','Due','On this phone'], ...photos.map((p,i) => [names[i].name,names[i].obs,p.omit?'No':'Yes',new Date(p.ts).toISOString(),p.area,p.sheet,p.tag,p.note,p.owner,p.due,p.blob?.size?'Yes':'Removed'])];
     const index = new File(['\uFEFF'+lines.map(row=>row.map(csvCell).join(',')).join('\r\n')], visitStem(v)+'_Photo-Index.csv', {type:'text/csv'});
     // This copy holds only the selected project, including history required by recurring items.
     const recovery = await projectRecoveryFile(snapshot, stamp);

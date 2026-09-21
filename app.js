@@ -1,8 +1,8 @@
 'use strict';
-const BUILD='v15.2';
+const BUILD='v16';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
-const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId'];
+const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId','omit'];
 const STORES=['visits','photos','meta','projects'];
 let db,stream,track,visit=null,pending=null,projects=[],allVisits=[],selectedProject=null;
 let area='',recent=[],count=0,busy=false,cur=null,lastId=null,undoTimer=null,reviewing=false;
@@ -54,7 +54,7 @@ const visitPhotos=()=>visit?photosFor(visit.id):Promise.resolve([]);
 function countFor(id){return transaction(['photos'],'readonly',tx=>{const q=tx.objectStore('photos').index('visitId').count(id);return ()=>q.result;});}
 function savePhoto(vid,ts,blob,shotArea){return transaction(['photos','meta'],'readwrite',tx=>{
  const q=tx.objectStore('photos').add({visitId:vid,ts,blob});
- q.onsuccess=()=>tx.objectStore('meta').add({id:q.result,note:'',tag:'',area:shotArea,sheet:'',owner:'',due:'',itemId:''});
+ q.onsuccess=()=>tx.objectStore('meta').add({id:q.result,note:'',tag:'',area:shotArea,sheet:'',owner:'',due:'',itemId:'',omit:''});
  return ()=>q.result;
 });}
 function isReadonly(){return !visit||(visit.closed&&!visit.editing);}
@@ -114,7 +114,7 @@ $('#projectSelect').onchange=safe(async()=>{selectedProject=Number($('#projectSe
 async function newVisit(){const p=currentProject();if(!p)return $('#addProject').click();
  const pv=(await allV()).filter(v=>v.projectId===p.id).sort((a,b)=>a.id-b.id);
  if(pv.some(v=>!v.closed||v.editing))throw new Error('Resume and complete the existing visit before starting another for this project.');
- const prev=pv.at(-1),v={schema:9,projectId:p.id,num:Math.max(0,...pv.map(v=>v.num))+1,date:Date.now(),started:Date.now(),project:p.name,projNum:p.number,projectAddress:p.address||'',client:p.client||'',clientContact:p.contact||'',clientPhone:p.phone||'',clientEmail:p.email||'',attendees:'',preparedBy:userProfile().name||prev?.preparedBy||stored('preparedBy',''),preparedCompany:userProfile().company,preparedPhone:userProfile().phone,preparedOfficePhone:userProfile().officePhone,preparedEmail:userProfile().email,distribution:'Owner, Contractor, File',generalNotes:'',revision:0,history:[],weather:'',temp:'',closed:false,exported:false,itemSeq:0,items:(prev?.items||[]).filter(i=>i.status!=='Closed').map(i=>({...clone(i),status:'Not reviewed',update:''}))};
+ const prev=pv.at(-1),v={schema:9,projectId:p.id,num:Math.max(0,...pv.map(v=>v.num))+1,date:Date.now(),started:Date.now(),project:p.name,projNum:p.number,projectAddress:p.address||'',client:p.client||'',clientContact:p.contact||'',clientPhone:p.phone||'',clientEmail:p.email||'',attendees:'',preparedBy:userProfile().name||prev?.preparedBy||stored('preparedBy',''),preparedCompany:userProfile().company,preparedPhone:userProfile().phone,preparedOfficePhone:userProfile().officePhone,preparedEmail:userProfile().email,distribution:'Owner, Contractor, File',reportLayout:stored('reportLayout','compact'),generalNotes:'',revision:0,history:[],weather:'',temp:'',closed:false,exported:false,itemSeq:0,items:(prev?.items||[]).filter(i=>i.status!=='Closed').map(i=>({...clone(i),status:'Not reviewed',update:''}))};
  v.id=await putV(v);visit=clone(v);reviewing=false;$('#start').classList.add('hide');showSetup();
 }
 on('#startBtn',async()=>{if(busy)return;$('#startBtn').disabled=true;try{await newVisit();}finally{$('#startBtn').disabled=false;}});
@@ -142,7 +142,7 @@ async function startCam(){
   try{
     if(stream) stream.getTracks().forEach(t=>t.stop());
     const acquired = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:"environment"}, width:{ideal:3840}, height:{ideal:2160} }, audio:false });
+      video:{ facingMode:{ideal:"environment"}, width:{ideal:4032}, height:{ideal:3024}, aspectRatio:{ideal:4/3} }, audio:false });
     if(request !== cameraRequest || !visit || reviewing || !$("#start").classList.contains("hide")){ acquired.getTracks().forEach(t=>t.stop()); return; }
     stream = acquired; track = stream.getVideoTracks()[0];
     const v = $("#cam");
@@ -173,6 +173,11 @@ document.addEventListener("visibilitychange", () => {
   $("#cam").play().catch(()=>{});
   if(!stream || !track || track.readyState !== "live") startCam();
 });
+
+/* ---------- rotation ---------- */
+function afterRotate(){ if(!stream) return; setTimeout(()=>{ $("#cam").play().catch(()=>{}); applyZoom(); }, 250); }
+if(typeof window.addEventListener==="function") window.addEventListener("orientationchange", afterRotate);
+if(typeof screen!=="undefined" && screen.orientation?.addEventListener) screen.orientation.addEventListener("change", afterRotate);
 
 /* ---------- zoom ---------- */
 function applyZoom(){
@@ -219,9 +224,9 @@ function shoot(){
   requestAnimationFrame(()=>$("#flash").classList.remove("on"));
   captureTask = (async()=>{
     try {
+      // Full camera frame in whatever orientation the phone is held. Only digital zoom trims it.
       const crop = nativeZoom ? 1 : zoom;
-      const availableW=v.videoWidth/crop,availableH=v.videoHeight/crop;
-      const sw=Math.min(availableW,availableH*4/3),sh=sw*3/4;
+      const sw=v.videoWidth/crop,sh=v.videoHeight/crop;
       canvas.width = Math.max(1, Math.round(sw)); canvas.height = Math.max(1, Math.round(sh));
       ctx.drawImage(v, (v.videoWidth-sw)/2, (v.videoHeight-sh)/2, sw, sh, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",PHOTO_QUALITY));
@@ -316,27 +321,42 @@ on('#visSave',async()=>{editable();if(!$('#vDate').value)throw new Error('Enter 
 on('#vPause',backToStart);
 function releaseUrls(){urls.forEach(URL.revokeObjectURL);urls=[];itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null;}if(thumbUrl){URL.revokeObjectURL(thumbUrl);thumbUrl=null;}}
 async function openGal(){await captureTask;stopCamera();const recs=await visitPhotos();urls.forEach(URL.revokeObjectURL);urls=[];$('#grid').replaceChildren();
+ const inReport=recs.filter(r=>!r.omit).length,left=recs.length-inReport;
  $('#galEmpty').style.display=recs.length?'none':'block';$('#galEmpty').textContent='No photos yet. You can still record items and export a report.';
- $('#galTitle').textContent=svr(visit.num)+' · '+recs.length+' photos';$('#galClose').textContent='Back';
+ $('#galTitle').textContent=svr(visit.num)+' · '+recs.length+' photos · '+inReport+' in report';$('#galClose').textContent='Back';
+ $('#galHelp').textContent=isReadonly()?'Tap a photo to view it.':'Tap a photo to add or edit its comment. Tap the check to leave a photo out of the report.';
+ $('#galAll').hidden=isReadonly()||!left;$('#galAll').textContent='Include all '+recs.length+' photos';
  $('#galBack').hidden=isReadonly();$('#galBuild').hidden=isReadonly();setCard('#galBuild',visit.walkFinishedAt?'Review Visit':'Finish Visit','check');
  $('#galBuild').disabled=false;$('#galExport').disabled=false;$('#galItems').textContent=(visit.closed?'View items':'Review items')+' ('+visit.items.filter(i=>i.status!=='Closed').length+' open)';
- recs.forEach((r,i)=>{if(!r.blob?.size){const row=document.createElement('p');row.className='auto';row.textContent='Observation '+String(i+1).padStart(3,'0')+' · Photo removed from phone. Open the saved cloud photo or restore the project recovery file.';$('#grid').append(row);return;}const u=URL.createObjectURL(r.blob);urls.push(u);const c=document.createElement('button');c.className='cell'+(r.note?' noted':'')+(r.tag==='Safety'?' safety':'');c.style.backgroundImage='url('+u+')';c.setAttribute('aria-label','Observation '+(i+1));const n=document.createElement('span');n.className='n';n.textContent=String(i+1).padStart(3,'0');const t=document.createElement('span');t.className='t';t.textContent=fmt(r.ts);c.append(n,t);c.onclick=safe(()=>openDet(r.id,i+1));$('#grid').append(c);});$('#gal').classList.add('open');}
+ let obs=0;
+ recs.forEach((r,i)=>{if(!r.blob?.size){const row=document.createElement('p');row.className='auto';row.textContent='Photo '+(i+1)+' · Removed from phone. Open the saved cloud photo or restore the project recovery file.';$('#grid').append(row);return;}
+  const num=r.omit?null:++obs;const u=URL.createObjectURL(r.blob);urls.push(u);
+  const wrap=document.createElement('div');wrap.className='cellwrap'+(r.omit?' out':'');
+  const c=document.createElement('button');c.className='cell'+(r.tag==='Safety'?' safety':'');c.style.backgroundImage='url('+u+')';c.setAttribute('aria-label',num?'Observation '+num:'Photo not in report');
+  const n=document.createElement('span');n.className='n';n.textContent=num?String(num).padStart(3,'0'):'Not in report';
+  const t=document.createElement('span');t.className='t';t.textContent=fmt(r.ts)+(r.note?' · Note':'');c.append(n,t);c.onclick=safe(()=>openDet(r.id,num));
+  const inc=document.createElement('button');inc.className='inc'+(r.omit?'':' on');inc.setAttribute('aria-pressed',String(!r.omit));inc.setAttribute('aria-label',r.omit?'Add to report':'Leave out of report');inc.textContent=r.omit?'':'✓';inc.disabled=isReadonly();
+  inc.onclick=safe(async e=>{e.stopPropagation();await setOmit(r.id,!r.omit);await openGal();});
+  wrap.append(c,inc);$('#grid').append(wrap);});
+ $('#gal').classList.add('open');}
+async function setOmit(id,omit){editable();const m=(await oneM(id))||{id};await put('meta',{...m,id,omit:omit?'1':''});readyBlob=null;}
+on('#galAll',async()=>{editable();for(const r of await visitPhotos())if(r.omit)await setOmit(r.id,false);await openGal();});
 on('#thumb',e=>{e.stopPropagation();return openGal();});
 on('#galClose',async()=>{$('#gal').classList.remove('open');if(galleryFromReview)await openReview();else await returnCamera();});
 on('#galBack',returnCamera);on('#galPause',backToStart);on('#galToStart',backToStart);on('#galInfo',openVisitInfo);on('#galItems',()=>openItems(false));
 async function completeVisit(){return openIssue();}
 on('#galEnd',finishWalk);on('#doneComplete',openIssue);
 async function openDet(id,n){const pr=await oneP(id);cur=joinMeta(pr,await oneM(id));if(detailUrl)URL.revokeObjectURL(detailUrl);detailUrl=URL.createObjectURL(cur.blob);$('#detImg').src=detailUrl;
- $('#detTitle').textContent='Observation '+String(n).padStart(3,'0');$('#detMeta').textContent=new Date(cur.ts).toLocaleString();
+ $('#detTitle').textContent=n?'Observation '+String(n).padStart(3,'0'):'Photo not in report';$('#detInclude').checked=!cur.omit;$('#detInclude').disabled=isReadonly();$('#detMeta').textContent=new Date(cur.ts).toLocaleString();
  for(const [id,key] of [['detNote','note'],['detArea','area'],['detSheet','sheet'],['detOwner','owner']]){$('#'+id).value=cur[key]||'';$('#'+id).disabled=isReadonly();}
- const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;cur.area=item.area;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;$('#detArea').value=cur.area;}cur.original=JSON.stringify([cur.note,cur.area,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId]);
+ const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;cur.area=item.area;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;$('#detArea').value=cur.area;}cur.original=JSON.stringify([cur.note,cur.area,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId,!cur.omit]);
  $('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';$('#detDue').disabled=isReadonly();
  drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=isReadonly();$('#detDel').hidden=isReadonly();$('#det').classList.add('open');$('#captureNext').hidden=!captureComment||isReadonly();$('#captureSkip').hidden=!captureComment;$('#detClose').textContent=captureComment?'Skip':'Back';$('#detSave').textContent=captureComment?'Save & Next':'Save';setCard('#detDel',captureComment?'Retake':'Delete Photo','edit');$('#captureHint').textContent=captureComment?'Your photo is already saved. Comments are optional.':'';$('#photoDetails').open=!!(cur.tag||cur.sheet||cur.owner||cur.due);}
 function drawTags(active){$('#tagRow').replaceChildren();TAGS.forEach(t=>{const b=document.createElement('button');b.className='tag'+(t===active?' on':'')+(t==='Safety'?' safety':'');b.textContent=t;b.disabled=isReadonly();b.onclick=()=>{cur.tag=cur.tag===t?'':t;drawTags(cur.tag);};$('#tagRow').append(b);});$('#actionBits').style.display=(['Issue','Action','Safety'].includes(active))?'block':'none';}
 function drawDue(active){$('#dueRow').replaceChildren();['Next visit','One week','Two weeks','Clear'].forEach(d=>{const b=document.createElement('button');b.className='tag'+((d==='Clear'?!active:dueValue(d,visit.date)===active)?' on':'');b.textContent=d;b.disabled=isReadonly();b.onclick=()=>{cur.due=d==='Clear'?'':dueValue(d,visit.date);$('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';drawDue(cur.due);};$('#dueRow').append(b);});}
 $('#detDue').onchange=()=>{cur.due=$('#detDue').value;drawDue(cur.due);};
-on('#detClose',async()=>{const current=JSON.stringify([$('#detNote').value,$('#detArea').value,$('#detSheet').value,$('#detOwner').value,cur.tag,cur.due,cur.itemId||'']);if(!isReadonly()&&current!==cur.original&&!confirm('Leave without saving these changes?'))return;$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}});
-on('#detSave',async()=>{editable();const next=clone(visit),m={id:cur.id,note:$('#detNote').value.trim(),tag:cur.tag||'',area:$('#detArea').value.trim(),sheet:$('#detSheet').value.trim(),owner:$('#detOwner').value.trim(),due:cur.due||'',itemId:cur.itemId||''};
+on('#detClose',async()=>{const current=JSON.stringify([$('#detNote').value,$('#detArea').value,$('#detSheet').value,$('#detOwner').value,cur.tag,cur.due,cur.itemId||'',$('#detInclude').checked]);if(!isReadonly()&&current!==cur.original&&!confirm('Leave without saving these changes?'))return;$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}});
+on('#detSave',async()=>{editable();const next=clone(visit),m={id:cur.id,note:$('#detNote').value.trim(),tag:cur.tag||'',area:$('#detArea').value.trim(),sheet:$('#detSheet').value.trim(),owner:$('#detOwner').value.trim(),due:cur.due||'',itemId:cur.itemId||'',omit:$('#detInclude').checked?'':'1'};
  const origin=next.items.find(i=>i.photoId===cur.id);
  if(origin&&!['Issue','Action','Safety'].includes(m.tag))throw new Error('This photo has a tracked item. Keep its Issue, Action or Safety tag and close the item from Review items when resolved.');
  next.items.forEach(i=>i.followupPhotoIds=(i.followupPhotoIds||[]).filter(id=>id!==cur.id));

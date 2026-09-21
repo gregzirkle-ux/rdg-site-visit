@@ -4,9 +4,6 @@
 const D = () => window.docx;
 
 const TW_PAGE  = 10080;  /* usable width in twips: letter 12240 less the 0.75in margins */
-const TW_PHOTO = 4320;
-const TW_TEXT  = TW_PAGE - TW_PHOTO;
-const PHOTO_PX = 264;    /* 2.75in at 96dpi */
 
 const RED = "A12B2A";
 const GREY = "6B6560";
@@ -58,8 +55,10 @@ function measure(blob) {
   });
 }
 
-async function imageBits(blob) {
-  // A report-sized copy keeps Word files small. Stored photos are never changed.
+/* Decodes a photo once and returns a report sized JPEG copy plus its true size.
+   Stored photos are never changed. Tests can supply window.SVReportDecode. */
+async function decodePhoto(blob) {
+  if (typeof window !== "undefined" && window.SVReportDecode) return window.SVReportDecode(blob);
   const url = URL.createObjectURL(blob);
   try {
     const im = await new Promise((resolve, reject) => {
@@ -68,19 +67,25 @@ async function imageBits(blob) {
       image.onerror = () => reject(new Error("Photo cannot be decoded"));
       image.src = url;
     });
-    const scale = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+    const scale = Math.min(1, 1800 / Math.max(im.naturalWidth, im.naturalHeight));
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(im.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(im.naturalHeight * scale));
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Photo conversion unavailable");
     ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
-    const copy = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
+    const copy = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
     if (!copy || !copy.size) throw new Error("Photo conversion failed");
-    const fit=Math.min(PHOTO_PX/im.naturalWidth,198/im.naturalHeight);
-    return {buf:await copy.arrayBuffer(),w:Math.round(im.naturalWidth*fit),h:Math.round(im.naturalHeight*fit)};
+    return { buf: await copy.arrayBuffer(), nw: im.naturalWidth, nh: im.naturalHeight };
   } finally { URL.revokeObjectURL(url); }
 }
+
+/* Scale into a box in inches without cropping. Returns pixels at 96 dpi. */
+function fitBox(img, boxW, boxH) {
+  const f = Math.min((boxW * 96) / img.nw, (boxH * 96) / img.nh);
+  return { width: Math.round(img.nw * f), height: Math.round(img.nh * f) };
+}
+function shapeOf(img) { return img.nh > img.nw * 1.05 ? "portrait" : "landscape"; }
 
 /* Uses logo.png from the app folder if it is there, otherwise falls back to type. */
 async function logoBits() {
@@ -175,68 +180,134 @@ function headerTable(visit, times) {
   });
 }
 
-async function observationTable(recs) {
-  const { Table, TableRow, TableCell, WidthType, Paragraph, ImageRun, VerticalAlign } = D();
-  const rows = [];
+/* ---------- photo observations ---------- */
 
-  for (let i = 0; i < recs.length; i++) {
-    const r = recs[i];
-    const n = String(r.observationNumber || i + 1).padStart(3, "0");
-    let img;
-    try {
-      img = await imageBits(r.blob);
-    } catch (e) {
-      throw new Error("could not read photo " + n + " (" + (e && e.message ? e.message : "unknown") + ")");
-    }
+const T = inches => Math.round(inches * 1440);
+const COMMENT_LINE = { style: "single", size: 4, color: "D4D8DC" };
+const commentBorders = { top: COMMENT_LINE, bottom: COMMENT_LINE, left: COMMENT_LINE, right: COMMENT_LINE };
 
-    const right = [ p("OBSERVATION " + n + (r.tag ? "   |   " + r.tag.toUpperCase() : ""),
-                      { bold: true, size: 20, color: RED }) ];
+function stampText(r) { return new Date(r.ts).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }); }
 
-    const loc = [r.area, r.sheet].filter(Boolean).join("   |   ");
-    if (loc) right.push(p(loc, { size: 17, color: r.tag === "Safety" ? RED : GREY, bold: r.tag === "Safety", caps: true }));
-
-    if (r.itemRef) right.push(p("Tracked item: " + r.itemRef, { size: 18, bold: true }));
-    if (r.note) {
-      right.push(p(r.note, { size: 20, after: 120, bold: r.tag === "Safety", color: r.tag === "Safety" ? RED : "101010" }));
-    } else {
-      right.push(p("", { after: 40 }));
-      ruledLines(4).forEach(l => right.push(l));
-    }
-
-    if (r.owner || r.due) {
-      right.push(p([r.owner ? "Owner: " + r.owner : "", r.due ? "Due: " + r.due : ""]
-                   .filter(Boolean).join("     "), { size: 18, bold: true, color: r.tag === "Safety" ? RED : GREY }));
-    }
-
-    rows.push(new TableRow({
-      cantSplit: (r.note||"").length < 1800,
-      children: [
-        new TableCell({
-          width: { size: TW_PHOTO, type: WidthType.DXA },
-          borders: noBorders,
-          margins: { top: 120, bottom: 240, right: 200 },
-          children: [
-            new Paragraph({ spacing: { after: 40 }, children: [
-              new ImageRun({ data: img.buf, transformation: { width: img.w, height: img.h } })
-            ]}),
-            p(new Date(r.ts).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }),
-              { size: 15, color: GREY })
-          ]
-        }),
-        new TableCell({
-          width: { size: TW_TEXT, type: WidthType.DXA },
-          borders: {top:{style:"single",size:4,color:"D4D8DC"},bottom:{style:"single",size:4,color:"D4D8DC"},left:{style:"single",size:4,color:"D4D8DC"},right:{style:"single",size:4,color:"D4D8DC"}},
-          margins: { top: 120, bottom: 120, left:160, right:160 },
-          verticalAlign: VerticalAlign.TOP,
-          children: right
-        })
-      ]
-    }));
-  }
-
-  return new Table({ width: { size: TW_PAGE, type: WidthType.DXA },
-    columnWidths: [TW_PHOTO, TW_TEXT], borders: noBorders, rows });
+/* Observation heading, location, note (or ruled writing lines), owner and due. */
+function observationText(r, blankLines) {
+  const safety = r.tag === "Safety";
+  const n = String(r.observationNumber).padStart(3, "0");
+  const out = [ p("OBSERVATION " + n + (r.tag ? "   |   " + r.tag.toUpperCase() : ""), { bold: true, size: 20, color: RED }) ];
+  const loc = [r.area, r.sheet].filter(Boolean).join("   |   ");
+  if (loc) out.push(p(loc, { size: 17, color: safety ? RED : GREY, bold: safety, caps: true }));
+  if (r.itemRef) out.push(p("Tracked item: " + r.itemRef, { size: 18, bold: true }));
+  if (r.note) out.push(p(r.note, { size: 20, after: 120, bold: safety, color: safety ? RED : "101010" }));
+  else { out.push(p("", { after: 40 })); ruledLines(blankLines).forEach(l => out.push(l)); }
+  if (r.owner || r.due) out.push(p([r.owner ? "Owner: " + r.owner : "", r.due ? "Due: " + r.due : ""]
+    .filter(Boolean).join("     "), { size: 18, bold: true, color: safety ? RED : GREY }));
+  return out;
 }
+
+function imagePara(r, size, align) {
+  const { Paragraph, ImageRun } = D();
+  return new Paragraph({ alignment: align, keepNext: true, spacing: { after: 40 },
+    children: [ new ImageRun({ data: r.img.buf, transformation: size }) ] });
+}
+
+function cell(width, children, opts = {}) {
+  const { TableCell, WidthType, VerticalAlign } = D();
+  return new TableCell({ width: { size: width, type: WidthType.DXA }, borders: opts.borders || noBorders,
+    margins: opts.margins || { top: 0, bottom: 0, left: 0, right: 0 },
+    verticalAlign: opts.valign || VerticalAlign.TOP, children });
+}
+
+function table(widths, rows) {
+  const { Table, WidthType } = D();
+  return new Table({ width: { size: widths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
+    columnWidths: widths, borders: noBorders, rows });
+}
+
+/* Estimated printed height in inches, used only to decide how rows share pages. */
+function textHeight(r, widthIn, blankLines) {
+  const perLine = Math.max(10, Math.floor(widthIn * 14));
+  let h = 0.22 + ((r.area || r.sheet) ? 0.19 : 0) + (r.itemRef ? 0.19 : 0) + ((r.owner || r.due) ? 0.19 : 0);
+  if (r.note) h += r.note.split("\n").reduce((s, line) => s + Math.max(1, Math.ceil(line.length / perLine)), 0) * 0.19 + 0.1;
+  else h += 0.2 + blankLines * 0.33;
+  return h + 0.17;
+}
+
+/* Layout "compact": photo left, comment right, three rows per page. */
+const COMPACT = { photoCol: 3.5, box: [3.3, 2.5] };
+function compactRow(r) {
+  const { TableRow, AlignmentType } = D();
+  const size = fitBox(r.img, COMPACT.box[0], COMPACT.box[1]);
+  const photoW = T(COMPACT.photoCol), textW = TW_PAGE - photoW;
+  return new TableRow({ cantSplit: (r.note || "").length < 1800, children: [
+    cell(photoW, [ imagePara(r, size, AlignmentType.CENTER), p(stampText(r), { size: 15, color: GREY, after: 0, align: AlignmentType.CENTER }) ],
+         { margins: { top: 120, bottom: 200, left: 0, right: 200 } }),
+    cell(textW, observationText(r, 4), { borders: commentBorders, margins: { top: 120, bottom: 120, left: 160, right: 160 } })
+  ]});
+}
+function compactPages(photos) {
+  const pages = [];
+  for (let i = 0; i < photos.length;) {
+    const n = photos.slice(i, i + 3).some(r => (r.note || "").length > 450) ? 2 : 3;
+    const group = photos.slice(i, i + n); i += n;
+    pages.push([ table([T(COMPACT.photoCol), TW_PAGE - T(COMPACT.photoCol)], group.map(compactRow)) ]);
+  }
+  return pages;
+}
+
+/* Layout "large": landscape photos run wide with the comment beside them,
+   portrait photos pair side by side with comments below. */
+const LARGE = { wideCol: 4.75, wideBox: [4.55, 3.42], pairBox: [2.5, 3.33], budget: 9.1 };
+function pairHeight(r, next) { return LARGE.pairBox[1] + 0.45 + Math.max(textHeight(r, 3.1, 3), textHeight(next, 3.1, 3)); }
+function rowHeight(r) { return Math.max(LARGE.wideBox[1] + 0.55, textHeight(r, 1.9, 5)); }
+
+function largeBlock(b) {
+  const { TableRow } = D();
+  const pad = { top: 120, bottom: 120, left: 140, right: 140 };
+  const { AlignmentType } = D();
+  if (b.kind === "wide" || b.kind === "tall") {
+    const r = b.photos[0], photoW = T(LARGE.wideCol);
+    return table([photoW, TW_PAGE - photoW], [ new TableRow({ cantSplit: true, children: [
+      cell(photoW, [ imagePara(r, fitBox(r.img, LARGE.wideBox[0], LARGE.wideBox[1]), AlignmentType.CENTER),
+                     p(stampText(r), { size: 15, color: GREY, after: 0, align: AlignmentType.CENTER }) ], { margins: { top: 0, bottom: 0, left: 0, right: 180 } }),
+      cell(TW_PAGE - photoW, observationText(r, 5), { borders: commentBorders, margins: pad })
+    ]}) ]);
+  }
+  const gap = T(0.25), col = Math.floor((TW_PAGE - gap) / 2), widths = [col, gap, TW_PAGE - gap - col];
+  const [a, c] = b.photos;
+  const pic = r => [ imagePara(r, fitBox(r.img, LARGE.pairBox[0], LARGE.pairBox[1]), AlignmentType.CENTER),
+                     p(stampText(r), { size: 15, color: GREY, after: 60, align: AlignmentType.CENTER }) ];
+  return table(widths, [
+    new TableRow({ cantSplit: true, children: [ cell(widths[0], pic(a)), cell(gap, [p("")]), cell(widths[2], pic(c)) ] }),
+    new TableRow({ cantSplit: ((a.note || "").length + (c.note || "").length) < 1500, children: [
+      cell(widths[0], observationText(a, 3), { borders: commentBorders, margins: pad }),
+      cell(gap, [p("")]),
+      cell(widths[2], observationText(c, 3), { borders: commentBorders, margins: pad })
+    ]})
+  ]);
+}
+/* Fills pages in photo order. Two portraits in a row share a pair row when it fits;
+   otherwise a portrait takes a single row so pages are not left half empty. */
+function largePages(photos) {
+  const pages = [];
+  let page = [], used = 0, i = 0;
+  const add = b => { used += b.h + (page.length ? 0.15 : 0); page.push(largeBlock(b)); };
+  const room = h => used + h + (page.length ? 0.15 : 0) <= LARGE.budget;
+  while (i < photos.length) {
+    const r = photos[i], next = photos[i + 1];
+    const canPair = r.shape === "portrait" && next && next.shape === "portrait";
+    if (canPair && room(pairHeight(r, next))) { add({ kind: "pair", photos: [r, next], h: pairHeight(r, next) }); i += 2; continue; }
+    if (page.length && room(rowHeight(r))) { add({ kind: r.shape === "portrait" ? "tall" : "wide", photos: [r], h: rowHeight(r) }); i++; continue; }
+    if (page.length) { pages.push(page); page = []; used = 0; continue; }
+    if (canPair) { add({ kind: "pair", photos: [r, next], h: pairHeight(r, next) }); i += 2; }
+    else { add({ kind: r.shape === "portrait" ? "tall" : "wide", photos: [r], h: rowHeight(r) }); i++; }
+  }
+  if (page.length) pages.push(page);
+  return pages;
+}
+
+const LAYOUTS = {
+  compact: { label: "Photo left, comment right", pages: compactPages },
+  large: { label: "Large photos, fitted to shape", pages: largePages }
+};
 
 function openItemsTable(items) {
   const { Table, TableRow, TableCell, WidthType } = D();
@@ -282,7 +353,8 @@ const LIMITATIONS =
 async function buildReport(visit, recs) {
   const { Document, Packer, Paragraph, TextRun, ImageRun, Footer, PageNumber, AlignmentType } = D();
 
-  const sorted = recs.map(r => ({...r})).sort((a, b) => a.ts - b.ts);
+  const omitted = recs.filter(r => r.omit).length;
+  const sorted = recs.filter(r => !r.omit).map(r => ({...r})).sort((a, b) => a.ts - b.ts);
   const times = sorted.length
     ? new Date(sorted[0].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) + " to " +
       new Date(sorted[sorted.length - 1].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })
@@ -305,7 +377,7 @@ async function buildReport(visit, recs) {
     p("", { after: 200 })
   ];
   if (safetyPhotos.length || safetyItems.length) {
-    body.push(p("SAFETY ITEMS — PRIORITY REVIEW", {bold:true, color:RED, size:28, after:160}));
+    body.push(p("SAFETY ITEMS: PRIORITY REVIEW", {bold:true, color:RED, size:28, after:160}));
     if (safetyItems.length) body.push(openItemsTable(safetyItems.map(it => ({...it,tag:"Safety"}))));
     if (safetyPhotos.length) body.push(p("Safety photo observations: " + safetyPhotos.map(r=>String(r.observationNumber).padStart(3,"0")).join(", ") + ". Listed first in Photo Observations.",{bold:true,color:RED,after:120}));
     
@@ -313,26 +385,34 @@ async function buildReport(visit, recs) {
   }
   body.push(p("GENERAL NOTES AND OBSERVATIONS", {bold:true,size:20,color:GREY,after:100}));
   body.push(p(visit.generalNotes || "No general notes entered.", {after:200}));
+  if (!sorted.length) body.push(p(omitted ? "No photographs selected for this report." : "No photographs recorded during this visit.", {after:200}));
   
-  if (sorted.length) {
-    const ordered=[...safetyPhotos,...otherPhotos];
-    for(let i=0;i<ordered.length;){
-      const count=ordered.slice(i,i+3).some(r=>(r.note||" ").length>450)?2:3;
-      body.push(new Paragraph({pageBreakBefore:true,children:[new TextRun({text:"PHOTO OBSERVATIONS",bold:true,size:22})],spacing:{after:120}}));
-      body.push(await observationTable(ordered.slice(i,i+count)));i+=count;
-    }
-  }
-  else body.push(p(sorted.length ? "All photographs are listed in the safety section above." : "No photographs recorded during this visit."));
   if (otherItems.length) {
     body.push(p("ITEM STATUS", {bold:true,size:20,color:GREY,before:240,after:160}));
     body.push(openItemsTable(otherItems));
   }
 
-  body.push(p("", { after: 300 }));
+  body.push(p("", { after: 200 }));
   body.push(p("LIMITATIONS OF THIS REPORT", { bold: true, size: 17, color: GREY, caps: true, after: 80 }));
   body.push(p(LIMITATIONS, { size: 16, color: GREY, after: 200 }));
   body.push(p("DISTRIBUTION", { bold: true, size: 17, color: GREY, caps: true, after: 80 }));
   body.push(p(visit.distribution || "Owner, Contractor, File", { size: 16, color: GREY }));
+
+  if (sorted.length) {
+    const ordered = [...safetyPhotos, ...otherPhotos];
+    for (const r of ordered) {
+      try { r.img = await decodePhoto(r.blob); }
+      catch (e) { throw new Error("could not read photo " + String(r.observationNumber).padStart(3, "0") + " (" + (e && e.message ? e.message : "unknown") + ")"); }
+      r.shape = shapeOf(r.img);
+    }
+    const layout = LAYOUTS[visit.reportLayout] || LAYOUTS.compact;
+    for (const page of layout.pages(ordered)) {
+      body.push(new Paragraph({ pageBreakBefore: true, keepNext: true, spacing: { after: 120 },
+        children: [ new TextRun({ text: "PHOTO OBSERVATIONS", bold: true, size: 22 }) ] }));
+      page.forEach((t, i) => { if (i) body.push(p("", { after: 160 })); body.push(t); });
+    }
+  }
+  body.push(p("", { after: 0 }));
 
   const doc = new Document({
     styles: { default: { document: { run: { font: "Calibri", size: 20 } } } },
@@ -356,4 +436,4 @@ function reportFileName(visit) {
   return project + "_SVR-" + String(visit.num).padStart(3,"0") + (visit.revision?"-R"+visit.revision:"") + "_" + d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()) + (!visit.closed||visit.editing?"_DRAFT":"") + ".docx";
 }
 
-window.SVReport = { buildReport, reportFileName };
+window.SVReport = { buildReport, reportFileName, layouts: Object.fromEntries(Object.entries(LAYOUTS).map(([k, v]) => [k, v.label])) };

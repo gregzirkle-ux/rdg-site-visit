@@ -32,7 +32,8 @@ async function openReview(){
  $('#reviewProject').textContent=visit.project+(visit.projNum?' · '+visit.projNum:'');$('#reviewTitle').textContent=visitLabel(visit)+' · '+new Date(visit.date).toLocaleDateString();
  $('#reviewStatus').textContent=(visit.editing?'Working edits saved on this device. Finalize or discard them below.':visit.issuedAt?'Issued '+new Date(visit.issuedAt).toLocaleString():visit.closed?'Previously completed report.':'Draft saved on this device. Mark issued when the report is ready.')+(unreviewed?' '+unreviewed+' open item(s) not reviewed.':'')+(visit.localPhotosRemovedAt?' Some original photos are archived; restore recovery data to edit or create a full package.':'');
  setCard('#reviewInfo','Visit Information','info',visit.attendees?'Details entered':'Date, attendees, weather');
- setCard('#reviewPhotos','Photos & Comments','camera',photos.length+' photos · '+photos.filter(p=>!!p.note).length+' comments');
+ setCard('#reviewPhotos','Photos & Comments','camera',photos.length+' photos · '+photos.filter(p=>!p.omit).length+' in report · '+photos.filter(p=>!!p.note).length+' comments');
+ setCard('#reviewLayout','Report Layout','notes',layoutName(visit.reportLayout));$('#reviewLayout').hidden=isReadonly();
  setCard('#reviewItems','Open Items','notes',visit.items.filter(i=>i.status!=='Closed').length+' open'+(unreviewed?' · '+unreviewed+' not reviewed':''));
  setCard('#reviewNotes','General Notes and Observations','edit',visit.generalNotes?'Notes entered':'Visit summary and general conditions');
  $('#reviewEdit').hidden=!isReadonly();$('#reviewCamera').hidden=isReadonly();$('#reviewIssue').hidden=isReadonly();
@@ -60,7 +61,8 @@ async function preservedVersion(v,photos,kind,reason=''){
 function majorEditReasons(baseline,v,photos){
  if(!baseline)return [];
  const reasons=[],before=baseline.photos,byId=new Map(before.map(p=>[p.id,p]));
- if(JSON.stringify(before.map(p=>p.id).sort((a,b)=>a-b))!==JSON.stringify(photos.map(p=>p.id).sort((a,b)=>a-b)))reasons.push('Photos added or removed');
+ const shown=list=>JSON.stringify(list.filter(p=>!p.omit).map(p=>p.id).sort((a,b)=>a-b));
+ if(shown(before)!==shown(photos))reasons.push('Photos added to or removed from the report');
  if(photos.some(p=>{const old=byId.get(p.id);return old&&['tag','owner','due'].some(k=>(old[k]||'')!==(p[k]||''));}))reasons.push('Photo type, responsibility, or due date changed');
  const oldItems=baseline.visit.items||[],newItems=v.items||[],oldMap=new Map(oldItems.map(i=>[i.id,i]));
  if(oldItems.length!==newItems.length||newItems.some(i=>!oldMap.has(i.id)))reasons.push('Tracked items added or removed');
@@ -129,7 +131,14 @@ function validateReportHistory(v,maps){
  }
  if(v.editing&&!v.history.length)throw new Error('Working edits need an issued baseline.');
 }
+const LAYOUT_NAMES={compact:'Photo left, comment right',large:'Large photos, fitted to shape'};
+function layoutName(key){return LAYOUT_NAMES[key]||LAYOUT_NAMES.compact;}
+function openLayout(){const current=visit.reportLayout in LAYOUT_NAMES?visit.reportLayout:'compact';
+ for(const key of Object.keys(LAYOUT_NAMES))$('#layout_'+key).classList.toggle('picked',key===current);$('#layoutSheet').classList.add('open');}
+async function pickLayout(key){editable();const next=clone(visit);next.reportLayout=key;await persistVisit(next);remember('reportLayout',key);$('#layoutSheet').classList.remove('open');await openReview();}
 function wireWorkflow(){
+ on('#reviewLayout',openLayout);on('#layoutBack',()=>$('#layoutSheet').classList.remove('open'));
+ on('#layout_compact',()=>pickLayout('compact'));on('#layout_large',()=>pickLayout('large'));
  on('#profileBtn',()=>openProfile());on('#profileClose',()=>$('#profileSheet').classList.remove('open'));
  $('#profileForm').onsubmit=e=>{e.preventDefault();return safe(async()=>{const p={};for(const key of ['Name','Company','Phone','Email','OfficePhone'])p[key==='OfficePhone'?'officePhone':key.toLowerCase()]=$('#profile'+key).value.trim();if(!p.name)throw new Error('Enter your name.');p.company=p.company||'Redline Design Group';p.officePhone=p.officePhone||'704-377-2990';remember('userProfile',p);remember('preparedBy',p.name);$('#profileSheet').classList.remove('open');})()};
  on('#projectClose',()=>$('#projectSheet').classList.remove('open'));
