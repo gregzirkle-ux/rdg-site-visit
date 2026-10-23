@@ -106,11 +106,18 @@ input:focus,textarea:focus,select:focus{border-color:#777;box-shadow:0 0 0 3px #
 #camwrap{touch-action:none} /* pinch zooms the camera, not the page (Android Chrome) */
 .areasheet{z-index:50;max-height:85vh;display:flex;flex-direction:column;padding-left:calc(16px + env(safe-area-inset-left));padding-right:calc(16px + env(safe-area-inset-right))}.scrim{z-index:49}
 .locadd{display:flex;gap:10px;align-items:center}.locadd input{margin:0}.locadd .btn{color:var(--ink);padding:9px 6px}
-.loclist{overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:12px;border-top:1px solid var(--line)}
-.locrow{display:flex;align-items:center;border-bottom:1px solid var(--line)}
-.locpick{flex:1;min-width:0;text-align:left;background:none;border:0;padding:15px 4px;font-size:16px;color:var(--ink);min-height:52px;overflow-wrap:anywhere}
-.locrow.on .locpick{font-weight:700}.locrow.on .locpick:before{content:'✓ '}
-.locdel{flex:0 0 auto;width:48px;height:48px;border:0;background:none;color:var(--mute);font-size:22px}
+/* Location wheel: five 44px rows, the middle one is the selection band */
+.areasheet{overflow-y:auto}
+.wheelwrap{position:relative;height:220px;margin-top:14px;perspective:600px}
+.wheelwrap:before{content:'';position:absolute;left:0;right:0;top:88px;height:44px;border:1.5px solid #77716b;border-radius:12px;background:#fff;pointer-events:none}
+.wheel{position:relative;height:220px;overflow-y:auto;scroll-snap-type:y mandatory;padding:88px 0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:none;
+  -webkit-mask-image:linear-gradient(transparent,#000 35%,#000 65%,transparent);mask-image:linear-gradient(transparent,#000 35%,#000 65%,transparent)}
+.wheel::-webkit-scrollbar{display:none}.wheel:focus-visible{outline:3px solid #636c76;outline-offset:2px;border-radius:12px}
+.wheelitem{display:block;width:100%;height:44px;scroll-snap-align:center;border:0;background:none;padding:0 14px;font-size:18px;color:var(--ink);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;backface-visibility:hidden}
+.wheelitem.on{font-weight:700}
+.wheelbtns{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:14px}.wheelbtns .ghost,.wheelbtns .primary{margin-top:0;min-height:52px}
+@media (orientation:landscape) and (max-height:540px){.wheelwrap,.wheel{height:132px}.wheel{padding:44px 0}.wheelwrap:before{top:44px}#locationHelp{display:none}}
 .locline{display:flex;align-items:center;gap:12px;margin:12px 0 4px;padding:6px 6px 6px 16px;background:#fff;border:1px solid var(--line);border-radius:14px;font-size:15px;font-weight:600;color:var(--ink)}
 .locchip{margin-left:auto;max-width:65%;border:1px solid #77716b;background:#fff;color:var(--ink);border-radius:10px;padding:10px 12px;font-size:15px;min-height:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ghead{grid-column:1/-1;margin:14px 0 2px;font-size:13px;font-weight:700;color:var(--ink);overflow-wrap:anywhere}

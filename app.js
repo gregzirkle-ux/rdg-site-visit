@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v17';
+const BUILD='v17.1';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','location','sheet','owner','due','itemId','omit'];
@@ -290,7 +290,8 @@ function paintCount(){
 
 /* ---------- location ----------
    The current location is kept on the visit and stamped on each new photo. Saved locations
-   belong to the project, most recently used first. Changing one photo never changes either. */
+   belong to the project and are shown on a wheel, sorted by number then name.
+   Changing one photo never changes either. */
 function projectFor(v){return projects.find(p=>p.id===v?.projectId);}
 function savedLocations(){return projectFor(visit)?.locations||[];}
 async function saveLocations(list){const p=projectFor(visit);if(!p)return;const next={...p,locations:list};await put('projects',next);projects=projects.map(x=>x.id===next.id?next:x);}
@@ -312,14 +313,23 @@ function closeLocation(){
   $("#locationSheet").classList.remove("open");$("#scrim").classList.remove("open");
   if(!document.querySelector('.sheet.open'))$("#cam").play().catch(()=>{});
 }
-function drawLocations(){
-  const list=$("#locationList");list.replaceChildren();const current=locationKey(locationTarget?.current);
-  const row=(name,label)=>{const r=document.createElement("div");r.className="locrow"+(locationKey(name)===current?" on":"");
-    const pick=document.createElement("button");pick.className="locpick";pick.textContent=label;pick.onclick=safe(()=>pickLocation(name));r.append(pick);
-    if(name){const del=document.createElement("button");del.className="locdel";del.textContent="×";del.setAttribute("aria-label","Remove "+name+" from the list");
-      del.onclick=safe(async()=>{await saveLocations(savedLocations().filter(x=>locationKey(x)!==locationKey(name)));drawLocations();});r.append(del);}
-    list.append(r);};
-  row("","General (no location)");savedLocations().forEach(name=>row(name,name));
+/* The wheel is a scroll-snapped column with two blank rows above and below, so row i sits in
+   the centre band when scrollTop is i rows. Spinning only moves the wheel; Use sets the location. */
+const WHEEL_ROW=44;
+function wheelNames(){return ['',...sortLocations(savedLocations())];}
+function wheelIndex(){const w=$("#locationWheel");return Math.max(0,Math.min(w.children.length-1,Math.round(w.scrollTop/WHEEL_ROW)));}
+function paintWheel(){
+  const w=$("#locationWheel"),at=w.scrollTop/WHEEL_ROW,i=wheelIndex();
+  [...w.children].forEach((b,k)=>{const d=Math.max(-3,Math.min(3,k-at));b.style.transform='rotateX('+(-d*20)+'deg)';b.style.opacity=String(Math.max(.25,1-Math.abs(d)*.3));
+    b.classList.toggle('on',k===i);b.setAttribute('aria-selected',String(k===i));});
+  $("#locationRemove").disabled=!wheelNames()[i];
+}
+function wheelTo(i,smooth){const w=$("#locationWheel");i=Math.max(0,Math.min(w.children.length-1,i));
+  if(smooth&&w.scrollTo)w.scrollTo({top:i*WHEEL_ROW,behavior:'smooth'});else w.scrollTop=i*WHEEL_ROW;paintWheel();}
+function drawLocations(focus=locationTarget?.current){
+  const w=$("#locationWheel"),names=wheelNames();w.replaceChildren();
+  names.forEach((name,i)=>{const b=document.createElement("button");b.type="button";b.className="wheelitem";b.textContent=name||"General (no location)";b.setAttribute("role","option");b.onclick=()=>wheelTo(i,true);w.append(b);});
+  wheelTo(Math.max(0,names.findIndex(n=>locationKey(n)===locationKey(focus))),false);
 }
 async function pickLocation(name){
   const target=locationTarget;if(!target)return;name=String(name||"").trim();
@@ -330,6 +340,11 @@ async function pickLocation(name){
 }
 on("#locationBtn",e=>{e.stopPropagation();if(visit&&!isReadonly())openLocation();});
 on("#locationAdd",()=>pickLocation($("#locationInput").value));
+on("#locationUse",()=>pickLocation(wheelNames()[wheelIndex()]));
+on("#locationRemove",async()=>{const i=wheelIndex(),name=wheelNames()[i];if(!name||!confirm('Remove '+name+' from the saved list? Photos keep their location.'))return;
+  await saveLocations(savedLocations().filter(x=>locationKey(x)!==locationKey(name)));drawLocations();wheelTo(i-1,false);});
+$("#locationWheel").addEventListener("scroll",()=>requestAnimationFrame(paintWheel),{passive:true});
+$("#locationWheel").addEventListener("keydown",e=>{if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();wheelTo(wheelIndex()+(e.key==="ArrowDown"?1:-1),true);}});
 on("#locationDone",()=>$("#locationInput").value.trim()?pickLocation($("#locationInput").value):closeLocation());
 $("#scrim").onclick=()=>closeLocation();
 $("#locationInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("#locationAdd").click();}});
