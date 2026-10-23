@@ -1,11 +1,11 @@
 'use strict';
-const BUILD='v16';
+const BUILD='v17';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
-const NOTE_KEYS=['note','tag','area','sheet','owner','due','itemId','omit'];
+const NOTE_KEYS=['note','tag','location','sheet','owner','due','itemId','omit'];
 const STORES=['visits','photos','meta','projects'];
 let db,stream,track,visit=null,pending=null,projects=[],allVisits=[],selectedProject=null;
-let area='',recent=[],count=0,busy=false,cur=null,lastId=null,undoTimer=null,reviewing=false;
+let count=0,openedReadonly=false,locationTarget=null,busy=false,cur=null,lastId=null,undoTimer=null,reviewing=false;
 let nativeZoom=null,zoom=1,maxZoom=5,captureTask=Promise.resolve(),readyBlob=null,readyName='',detailUrl=null;
 let urls=[],itemUrls=[],editingItem=null,itemsFromStart=false;
 const svr=n=>'SVR '+String(n).padStart(3,'0');
@@ -45,16 +45,21 @@ function read(name,key,index){return transaction([name],'readonly',tx=>{
 function getMany(name,index,key){return transaction([name],'readonly',tx=>{const q=tx.objectStore(name).index(index).getAll(key);return ()=>q.result;});}
 function put(name,r){return transaction([name],'readwrite',tx=>{const q=tx.objectStore(name).put(r);return ()=>q.result;});}
 const allV=()=>read('visits'),oneP=id=>read('photos',id),oneM=id=>read('meta',id),putV=v=>put('visits',v);
-function joinMeta(pr,mr){const out={id:pr.id,visitId:pr.visitId,ts:pr.ts,blob:pr.blob};NOTE_KEYS.forEach(k=>out[k]=mr&&Object.prototype.hasOwnProperty.call(mr,k)?mr[k]:(pr[k]||''));return out;}
+const has=(r,k)=>!!r&&Object.prototype.hasOwnProperty.call(r,k);
+/* Photo records are written once. Notes, location and the excluded flag live in meta.
+   Before v17 the location was called area, and excluded was set on the photo record. */
+function isExcluded(pr,mr){return mr&&mr.excluded!=null?mr.excluded==='1':!!pr.excluded;}
+function joinMeta(pr,mr){const out={id:pr.id,visitId:pr.visitId,ts:pr.ts,blob:pr.blob};NOTE_KEYS.forEach(k=>out[k]=has(mr,k)?mr[k]:(pr[k]||''));
+ if(!has(mr,'location'))out.location=(mr&&mr.area)||pr.location||pr.area||'';out.excluded=isExcluded(pr,mr);return out;}
 async function photosFor(id){const ps=await getMany('photos','visitId',id);return transaction(['meta'],'readonly',tx=>{
  const requests=ps.map(p=>tx.objectStore('meta').get(p.id));
- return ()=>ps.map((p,i)=>({...joinMeta(p,requests[i].result),excluded:!!p.excluded})).filter(p=>!p.excluded).sort((a,b)=>a.ts-b.ts);
+ return ()=>ps.map((p,i)=>joinMeta(p,requests[i].result)).filter(p=>!p.excluded).sort((a,b)=>a.ts-b.ts);
 });}
 const visitPhotos=()=>visit?photosFor(visit.id):Promise.resolve([]);
 function countFor(id){return transaction(['photos'],'readonly',tx=>{const q=tx.objectStore('photos').index('visitId').count(id);return ()=>q.result;});}
-function savePhoto(vid,ts,blob,shotArea){return transaction(['photos','meta'],'readwrite',tx=>{
+function savePhoto(vid,ts,blob,shotLocation){return transaction(['photos','meta'],'readwrite',tx=>{
  const q=tx.objectStore('photos').add({visitId:vid,ts,blob});
- q.onsuccess=()=>tx.objectStore('meta').add({id:q.result,note:'',tag:'',area:shotArea,sheet:'',owner:'',due:'',itemId:'',omit:''});
+ q.onsuccess=()=>tx.objectStore('meta').add({id:q.result,note:'',tag:'',location:shotLocation,sheet:'',owner:'',due:'',itemId:'',omit:'',excluded:''});
  return ()=>q.result;
 });}
 function isReadonly(){return !visit||(visit.closed&&!visit.editing);}
@@ -63,7 +68,7 @@ async function persistVisit(next){await putV(next);if(visit&&visit.id===next.id)
 async function deletePhoto(id){editable();const next=clone(visit);
  if(next.items.some(i=>i.photoId===id))throw new Error('This photo is the original evidence for a tracked item. Keep it with the item history.');
  next.items.forEach(i=>i.followupPhotoIds=(i.followupPhotoIds||[]).filter(p=>p!==id));
- await transaction(['photos','meta','visits'],'readwrite',tx=>{const preserved=(next.history||[]).some(h=>h.photos.some(p=>p.id===id));if(preserved){const q=tx.objectStore('photos').get(id);q.onsuccess=()=>{const p=q.result;if(p)tx.objectStore('photos').put({...p,excluded:true});};}else{tx.objectStore('photos').delete(id);tx.objectStore('meta').delete(id);}tx.objectStore('visits').put(next);});visit=next;readyBlob=null;
+ await transaction(['photos','meta','visits'],'readwrite',tx=>{const preserved=(next.history||[]).some(h=>h.photos.some(p=>p.id===id));if(preserved){const q=tx.objectStore('meta').get(id);q.onsuccess=()=>tx.objectStore('meta').put({...(q.result||{}),id,excluded:'1'});}else{tx.objectStore('photos').delete(id);tx.objectStore('meta').delete(id);}tx.objectStore('visits').put(next);});visit=next;readyBlob=null;
 }
 function dueValue(value,ts){if(value==='One week'||value==='Two weeks'){const d=new Date(ts);d.setDate(d.getDate()+(value==='One week'?7:14));return dateInput(d);}return value||'';}
 function newItem(v,data={}){v.itemSeq=(v.itemSeq||0)+1;return {id:'item:'+v.id+':'+v.itemSeq,ref:String(v.num).padStart(3,'0')+'.'+String(v.itemSeq).padStart(2,'0'),originVisitId:v.id,firstVisitNum:v.num,firstNoted:v.date,note:'',owner:'',due:'',area:'',status:'New',update:'',photoId:null,followupPhotoIds:[],...data};}
@@ -75,7 +80,7 @@ async function migrate(){
   const key=(v.projNum?'number:'+v.projNum.trim().toLowerCase():'name:'+(v.project||'Unassigned project').trim().toLowerCase());
   if(!grouped.has(key))grouped.set(key,{id:nextProject++,key,name:v.project||'Unassigned project',number:v.projNum||''});
   v.projectId=grouped.get(key).id;v.items=[];v.itemSeq=0;
-  for(const r of await photosFor(v.id))if(r.tag==='Issue'||r.tag==='Action')v.items.push(newItem(v,{photoId:r.id,note:r.note,owner:r.owner,due:dueValue(r.due,v.date),area:r.area,firstNoted:r.ts}));
+  for(const r of await photosFor(v.id))if(r.tag==='Issue'||r.tag==='Action')v.items.push(newItem(v,{photoId:r.id,note:r.note,owner:r.owner,due:dueValue(r.due,v.date),area:r.location,firstNoted:r.ts}));
   v.closed=!!(v.closed||v.exported);if(v.closed)v.legacyReportItems=clone(v.items);v.schema=9;
  }
  // Preserve all previous report numbers. Only future numbers become project specific.
@@ -86,8 +91,20 @@ async function migrate(){
  }
  await transaction(['projects','visits'],'readwrite',tx=>{grouped.forEach(p=>tx.objectStore('projects').put(p));vs.forEach(v=>tx.objectStore('visits').put(v));});
 }
+/* v17: area becomes location in meta, saved locations move to the project, each visit keeps
+   its own current location, and visits issued earlier keep their original report order.
+   Only meta, visit and project records are written. Runs again after a restore. */
+async function migrateLocations(){
+ const [ms,vs,ps]=await Promise.all([read('meta'),allV(),read('projects')]);
+ const meta=ms.filter(m=>!has(m,'location')).map(m=>({...m,location:m.area||''}));
+ const visits=vs.filter(v=>v.reportOrder===undefined||(v.currentLocation===undefined&&(!v.closed||v.editing))).map(v=>{const n={...v,reportOrder:reportOrderOf(v)};if(n.currentLocation===undefined&&(!v.closed||v.editing))n.currentLocation=String(stored('areas:'+v.projectId,{}).area||'');return n;});
+ const projs=ps.filter(p=>!Array.isArray(p.locations)).map(p=>{const old=stored('areas:'+p.id,{});return {...p,locations:(Array.isArray(old.recent)?old.recent:[]).filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim())};});
+ if(!meta.length&&!visits.length&&!projs.length)return;
+ await transaction(['meta','visits','projects'],'readwrite',tx=>{meta.forEach(m=>tx.objectStore('meta').put(m));visits.forEach(v=>tx.objectStore('visits').put(v));projs.forEach(p=>tx.objectStore('projects').put(p));});
+}
 function currentProject(){return projects.find(p=>p.id===selectedProject);}
 async function loadState(){
+ await migrateLocations();
  projects=(await read('projects')).sort((a,b)=>a.name.localeCompare(b.name));allVisits=(await allV()).sort((a,b)=>a.id-b.id);
  if(!projects.some(p=>p.id===selectedProject))selectedProject=projects.some(p=>p.id===stored('selectedProject',null))?stored('selectedProject',null):projects[0]?.id||null;
  pending=allVisits.filter(v=>v.projectId===selectedProject&&(!v.closed||v.editing)).pop()||null;
@@ -114,16 +131,14 @@ $('#projectSelect').onchange=safe(async()=>{selectedProject=Number($('#projectSe
 async function newVisit(){const p=currentProject();if(!p)return $('#addProject').click();
  const pv=(await allV()).filter(v=>v.projectId===p.id).sort((a,b)=>a.id-b.id);
  if(pv.some(v=>!v.closed||v.editing))throw new Error('Resume and complete the existing visit before starting another for this project.');
- const prev=pv.at(-1),v={schema:9,projectId:p.id,num:Math.max(0,...pv.map(v=>v.num))+1,date:Date.now(),started:Date.now(),project:p.name,projNum:p.number,projectAddress:p.address||'',client:p.client||'',clientContact:p.contact||'',clientPhone:p.phone||'',clientEmail:p.email||'',attendees:'',preparedBy:userProfile().name||prev?.preparedBy||stored('preparedBy',''),preparedCompany:userProfile().company,preparedPhone:userProfile().phone,preparedOfficePhone:userProfile().officePhone,preparedEmail:userProfile().email,distribution:'Owner, Contractor, File',reportLayout:stored('reportLayout','compact'),generalNotes:'',revision:0,history:[],weather:'',temp:'',closed:false,exported:false,itemSeq:0,items:(prev?.items||[]).filter(i=>i.status!=='Closed').map(i=>({...clone(i),status:'Not reviewed',update:''}))};
- v.id=await putV(v);visit=clone(v);reviewing=false;$('#start').classList.add('hide');showSetup();
+ const prev=pv.at(-1),v={schema:9,projectId:p.id,num:Math.max(0,...pv.map(v=>v.num))+1,date:Date.now(),started:Date.now(),project:p.name,projNum:p.number,projectAddress:p.address||'',client:p.client||'',clientContact:p.contact||'',clientPhone:p.phone||'',clientEmail:p.email||'',attendees:'',preparedBy:userProfile().name||prev?.preparedBy||stored('preparedBy',''),preparedCompany:userProfile().company,preparedPhone:userProfile().phone,preparedOfficePhone:userProfile().officePhone,preparedEmail:userProfile().email,distribution:'Owner, Contractor, File',reportLayout:stored('reportLayout','compact'),reportOrder:'location',currentLocation:'',generalNotes:'',revision:0,history:[],weather:'',temp:'',closed:false,exported:false,itemSeq:0,items:(prev?.items||[]).filter(i=>i.status!=='Closed').map(i=>({...clone(i),status:'Not reviewed',update:''}))};
+ v.id=await putV(v);visit=clone(v);reviewing=false;openedReadonly=false;$('#start').classList.add('hide');showSetup();
 }
 on('#startBtn',async()=>{if(busy)return;$('#startBtn').disabled=true;try{await newVisit();}finally{$('#startBtn').disabled=false;}});
-on('#resumeBtn',async()=>{visit=clone(pending);reviewing=false;$('#start').classList.add('hide');if(visit.editing||visit.walkFinishedAt)await openReview();else showSetup();});
-function saveAreas(){if(visit)remember('areas:'+visit.projectId,{area,recent});}
-async function enterCapture(v){visit=clone(v);reviewing=false;const a=stored('areas:'+v.projectId,{area:'',recent:[]});area=a.area;recent=a.recent;lastId=null;$('#undo').classList.remove('show');$('#start').classList.add('hide');await refreshCount();paintProj();paintArea();fetchWeather(v.id);startCam();}
-async function openPast(v){$('#existingSheet').classList.remove('open');visit=clone(v);reviewing=true;$('#start').classList.add('hide');paintProj();await openReview();}
+on('#resumeBtn',async()=>{visit=clone(pending);reviewing=false;openedReadonly=false;$('#start').classList.add('hide');if(visit.editing||visit.walkFinishedAt)await openReview();else showSetup();});
+async function openPast(v){$('#existingSheet').classList.remove('open');visit=clone(v);reviewing=true;openedReadonly=isReadonly();$('#start').classList.add('hide');paintProj();await openReview();}
 function stopCamera(){cameraRequest++;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;track=null;}
-async function backToStart(){await captureTask;stopCamera();visit=null;reviewing=false;readyBlob=null;lastId=null;
+async function backToStart(){await captureTask;stopCamera();visit=null;reviewing=false;openedReadonly=false;photoSave=null;readyBlob=null;lastId=null;
  document.querySelectorAll('.sheet,.areasheet,.scrim').forEach(e=>e.classList.remove('open'));$('#busyWrap').classList.remove('show');$('#undo').classList.remove('show');releaseUrls();await loadState();$('#start').classList.remove('hide');}
 function paintProj(){if(visit){$('#projBtn').textContent='Visit Info';$('#projBtn').title=visitLabel(visit);}}
 on('#pauseBtn',e=>{e.stopPropagation();return backToStart();});on('#finishBtn',e=>{e.stopPropagation();return finishWalk();});
@@ -216,8 +231,8 @@ const PHOTO_QUALITY = 0.92;
 function shoot(){
   const v = $("#cam");
   if(busy || !v.videoWidth || !visit || reviewing || isReadonly() || document.querySelector('.sheet.open')) return;
-  if($("#areaSheet").classList.contains("open")) return;
-  const vid = visit.id, shotArea = area, ts = Date.now();
+  if($("#locationSheet").classList.contains("open")) return;
+  const vid = visit.id, shotLocation = visit.currentLocation || "", ts = Date.now();
   busy = true;
   $("#shutter").classList.add("busy");
   $("#flash").classList.add("on");
@@ -231,7 +246,7 @@ function shoot(){
       ctx.drawImage(v, (v.videoWidth-sw)/2, (v.videoHeight-sh)/2, sw, sh, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",PHOTO_QUALITY));
       if(!blob || !blob.size) throw new Error("The camera did not return a photo. Please take it again.");
-      lastId = await savePhoto(vid, ts, blob, shotArea);
+      lastId = await savePhoto(vid, ts, blob, shotLocation);
       if(visit && visit.id===vid){ await refreshCount(); $('#cameraSaved').textContent='Photo saved on this device'; await openCaptured(lastId); }
     } catch(e){ showError(e); }
     finally { busy=false; $("#shutter").classList.remove("busy"); }
@@ -273,41 +288,51 @@ function paintCount(){
   b.textContent = count; b.style.display = count ? "grid" : "none";
 }
 
-/* ---------- area ---------- */
-function openArea(){
-  $("#areaInput").value = area; drawRecent();
-  $("#areaSheet").classList.add("open"); $("#scrim").classList.add("open");
-  setTimeout(()=>$("#areaInput").focus(), 260);
+/* ---------- location ----------
+   The current location is kept on the visit and stamped on each new photo. Saved locations
+   belong to the project, most recently used first. Changing one photo never changes either. */
+function projectFor(v){return projects.find(p=>p.id===v?.projectId);}
+function savedLocations(){return projectFor(visit)?.locations||[];}
+async function saveLocations(list){const p=projectFor(visit);if(!p)return;const next={...p,locations:list};await put('projects',next);projects=projects.map(x=>x.id===next.id?next:x);}
+async function rememberLocation(name){if(name)await saveLocations([name,...savedLocations().filter(x=>locationKey(x)!==locationKey(name))]);}
+async function setCurrentLocation(name){const next=clone(visit);next.currentLocation=name;await putV(next);visit=next;paintLocation();}
+async function setPhotoLocation(id,name){editable();const m=(await oneM(id))||{id};const next=clone(visit),item=next.items.find(i=>i.photoId===id);if(item)item.area=name;
+ await transaction(['meta','visits'],'readwrite',tx=>{tx.objectStore('meta').put({...m,id,location:name});if(item)tx.objectStore('visits').put(next);});if(item)visit=next;readyBlob=null;}
+function paintLocation(){$("#locationBtn").textContent=(visit?.currentLocation)||"Set location";}
+function openLocation(target=null,current=visit?.currentLocation||''){
+  locationTarget={photoId:target,current};
+  $("#locationTitle").textContent=target==null?"Location":"Location for this photo";
+  $("#locationHelp").textContent=target==null?"New photos are tagged with this location until you change it.":"Changes this photo only. New photos keep the current location.";
+  $("#locationInput").value="";drawLocations();
+  $("#locationSheet").classList.add("open");$("#scrim").classList.add("open");
+  if(!savedLocations().length)setTimeout(()=>$("#locationInput").focus(),260);
 }
-function closeArea(save){
-  if(save){
-    area = $("#areaInput").value.trim();
-    saveAreas();
-    if(area && recent.indexOf(area) === -1){
-      recent.unshift(area); recent = recent.slice(0,8);
-      saveAreas();
-    }
-    paintArea();
-  }
-  $("#areaInput").blur();
-  $("#areaSheet").classList.remove("open"); $("#scrim").classList.remove("open");
-  $("#cam").play().catch(()=>{});
+function closeLocation(){
+  locationTarget=null;$("#locationInput").blur();
+  $("#locationSheet").classList.remove("open");$("#scrim").classList.remove("open");
+  if(!document.querySelector('.sheet.open'))$("#cam").play().catch(()=>{});
 }
-function drawRecent(){
-  const r = $("#areaRecent"); r.innerHTML = "";
-  recent.forEach(a => {
-    const b = document.createElement("button");
-    b.className = "tag" + (a === area ? " on" : "");
-    b.textContent = a;
-    b.onclick = () => { $("#areaInput").value = a; closeArea(true); };
-    r.appendChild(b);
-  });
+function drawLocations(){
+  const list=$("#locationList");list.replaceChildren();const current=locationKey(locationTarget?.current);
+  const row=(name,label)=>{const r=document.createElement("div");r.className="locrow"+(locationKey(name)===current?" on":"");
+    const pick=document.createElement("button");pick.className="locpick";pick.textContent=label;pick.onclick=safe(()=>pickLocation(name));r.append(pick);
+    if(name){const del=document.createElement("button");del.className="locdel";del.textContent="×";del.setAttribute("aria-label","Remove "+name+" from the list");
+      del.onclick=safe(async()=>{await saveLocations(savedLocations().filter(x=>locationKey(x)!==locationKey(name)));drawLocations();});r.append(del);}
+    list.append(r);};
+  row("","General (no location)");savedLocations().forEach(name=>row(name,name));
 }
-function paintArea(){ $("#areaBtn").textContent = area || "Set area"; }
-$("#areaBtn").onclick = e => { e.stopPropagation(); openArea(); };
-$("#areaDone").onclick = () => closeArea(true);
-$("#scrim").onclick = () => closeArea(true);
-$("#areaInput").addEventListener("keydown", e => { if(e.key === "Enter") closeArea(true); });
+async function pickLocation(name){
+  const target=locationTarget;if(!target)return;name=String(name||"").trim();
+  if(name)await rememberLocation(name);
+  if(target.photoId==null)await setCurrentLocation(name);else await setPhotoLocation(target.photoId,name);
+  closeLocation();
+  if(target.photoId!=null){if($('#det').classList.contains('open')&&cur?.id===target.photoId){cur.location=name;paintDetLocation();}if($('#gal').classList.contains('open'))await openGal();}
+}
+on("#locationBtn",e=>{e.stopPropagation();if(visit&&!isReadonly())openLocation();});
+on("#locationAdd",()=>pickLocation($("#locationInput").value));
+on("#locationDone",()=>$("#locationInput").value.trim()?pickLocation($("#locationInput").value):closeLocation());
+$("#scrim").onclick=()=>closeLocation();
+$("#locationInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("#locationAdd").click();}});
 
 /* Visit details and photo review */
 on('#projBtn',e=>{e.stopPropagation();openVisitInfo();});
@@ -328,16 +353,19 @@ async function openGal(){await captureTask;stopCamera();const recs=await visitPh
  $('#galAll').hidden=isReadonly()||!left;$('#galAll').textContent='Include all '+recs.length+' photos';
  $('#galBack').hidden=isReadonly();$('#galBuild').hidden=isReadonly();setCard('#galBuild',visit.walkFinishedAt?'Review Visit':'Finish Visit','check');
  $('#galBuild').disabled=false;$('#galExport').disabled=false;$('#galItems').textContent=(visit.closed?'View items':'Review items')+' ('+visit.items.filter(i=>i.status!=='Closed').length+' open)';
- let obs=0;
- recs.forEach((r,i)=>{if(!r.blob?.size){const row=document.createElement('p');row.className='auto';row.textContent='Photo '+(i+1)+' · Removed from phone. Open the saved cloud photo or restore the project recovery file.';$('#grid').append(row);return;}
-  const num=r.omit?null:++obs;const u=URL.createObjectURL(r.blob);urls.push(u);
+ const plan=photoPlan(visit,recs),groups=galleryGroups(visit,recs),headings=groups.some(g=>g.key);
+ for(const g of groups){if(headings){const h=document.createElement('h4');h.className='ghead';h.textContent=g.label+' · '+g.photos.length;$('#grid').append(h);}
+ g.photos.forEach(r=>{if(!r.blob?.size){const row=document.createElement('p');row.className='auto';row.textContent='Photo '+(recs.indexOf(r)+1)+' · Removed from phone. Open the saved cloud photo or restore the project recovery file.';$('#grid').append(row);return;}
+  const num=r.omit?null:plan.numbers.get(r.id);const u=URL.createObjectURL(r.blob);urls.push(u);
   const wrap=document.createElement('div');wrap.className='cellwrap'+(r.omit?' out':'');
   const c=document.createElement('button');c.className='cell'+(r.tag==='Safety'?' safety':'');c.style.backgroundImage='url('+u+')';c.setAttribute('aria-label',num?'Observation '+num:'Photo not in report');
   const n=document.createElement('span');n.className='n';n.textContent=num?String(num).padStart(3,'0'):'Not in report';
   const t=document.createElement('span');t.className='t';t.textContent=fmt(r.ts)+(r.note?' · Note':'');c.append(n,t);c.onclick=safe(()=>openDet(r.id,num));
   const inc=document.createElement('button');inc.className='inc'+(r.omit?'':' on');inc.setAttribute('aria-pressed',String(!r.omit));inc.setAttribute('aria-label',r.omit?'Add to report':'Leave out of report');inc.textContent=r.omit?'':'✓';inc.disabled=isReadonly();
   inc.onclick=safe(async e=>{e.stopPropagation();await setOmit(r.id,!r.omit);await openGal();});
-  wrap.append(c,inc);$('#grid').append(wrap);});
+  const loc=document.createElement('button');loc.className='cloc';loc.textContent=photoLocation(r)||'General';loc.disabled=isReadonly();loc.setAttribute('aria-label','Location: '+(photoLocation(r)||'General')+'. Change for this photo');
+  loc.onclick=e=>{e.stopPropagation();openLocation(r.id,photoLocation(r));};
+  wrap.append(c,inc,loc);$('#grid').append(wrap);});}
  $('#gal').classList.add('open');}
 async function setOmit(id,omit){editable();const m=(await oneM(id))||{id};await put('meta',{...m,id,omit:omit?'1':''});readyBlob=null;}
 on('#galAll',async()=>{editable();for(const r of await visitPhotos())if(r.omit)await setOmit(r.id,false);await openGal();});
@@ -346,25 +374,27 @@ on('#galClose',async()=>{$('#gal').classList.remove('open');if(galleryFromReview
 on('#galBack',returnCamera);on('#galPause',backToStart);on('#galToStart',backToStart);on('#galInfo',openVisitInfo);on('#galItems',()=>openItems(false));
 async function completeVisit(){return openIssue();}
 on('#galEnd',finishWalk);on('#doneComplete',openIssue);
-async function openDet(id,n){const pr=await oneP(id);cur=joinMeta(pr,await oneM(id));if(detailUrl)URL.revokeObjectURL(detailUrl);detailUrl=URL.createObjectURL(cur.blob);$('#detImg').src=detailUrl;
+function paintDetLocation(){$('#detLocation').textContent=cur.location||'General (no location)';$('#detLocation').disabled=isReadonly();}
+async function openDet(id,n){if(n===undefined)n=photoPlan(visit,await visitPhotos()).numbers.get(id)||null;const pr=await oneP(id);cur=joinMeta(pr,await oneM(id));if(detailUrl)URL.revokeObjectURL(detailUrl);detailUrl=URL.createObjectURL(cur.blob);$('#detImg').src=detailUrl;
  $('#detTitle').textContent=n?'Observation '+String(n).padStart(3,'0'):'Photo not in report';$('#detInclude').checked=!cur.omit;$('#detInclude').disabled=isReadonly();$('#detMeta').textContent=new Date(cur.ts).toLocaleString();
- for(const [id,key] of [['detNote','note'],['detArea','area'],['detSheet','sheet'],['detOwner','owner']]){$('#'+id).value=cur[key]||'';$('#'+id).disabled=isReadonly();}
- const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;cur.area=item.area;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;$('#detArea').value=cur.area;}cur.original=JSON.stringify([cur.note,cur.area,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId,!cur.omit]);
+ for(const [id,key] of [['detNote','note'],['detSheet','sheet'],['detOwner','owner']]){$('#'+id).value=cur[key]||'';$('#'+id).disabled=isReadonly();}paintDetLocation();
+ const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;}cur.original=JSON.stringify([cur.note,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId,!cur.omit]);
  $('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';$('#detDue').disabled=isReadonly();
  drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=isReadonly();$('#detDel').hidden=isReadonly();$('#det').classList.add('open');$('#captureNext').hidden=!captureComment||isReadonly();$('#captureSkip').hidden=!captureComment;$('#detClose').textContent=captureComment?'Skip':'Back';$('#detSave').textContent=captureComment?'Save & Next':'Save';setCard('#detDel',captureComment?'Retake':'Delete Photo','edit');$('#captureHint').textContent=captureComment?'Your photo is already saved. Comments are optional.':'';$('#photoDetails').open=!!(cur.tag||cur.sheet||cur.owner||cur.due);}
 function drawTags(active){$('#tagRow').replaceChildren();TAGS.forEach(t=>{const b=document.createElement('button');b.className='tag'+(t===active?' on':'')+(t==='Safety'?' safety':'');b.textContent=t;b.disabled=isReadonly();b.onclick=()=>{cur.tag=cur.tag===t?'':t;drawTags(cur.tag);};$('#tagRow').append(b);});$('#actionBits').style.display=(['Issue','Action','Safety'].includes(active))?'block':'none';}
 function drawDue(active){$('#dueRow').replaceChildren();['Next visit','One week','Two weeks','Clear'].forEach(d=>{const b=document.createElement('button');b.className='tag'+((d==='Clear'?!active:dueValue(d,visit.date)===active)?' on':'');b.textContent=d;b.disabled=isReadonly();b.onclick=()=>{cur.due=d==='Clear'?'':dueValue(d,visit.date);$('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';drawDue(cur.due);};$('#dueRow').append(b);});}
 $('#detDue').onchange=()=>{cur.due=$('#detDue').value;drawDue(cur.due);};
-on('#detClose',async()=>{const current=JSON.stringify([$('#detNote').value,$('#detArea').value,$('#detSheet').value,$('#detOwner').value,cur.tag,cur.due,cur.itemId||'',$('#detInclude').checked]);if(!isReadonly()&&current!==cur.original&&!confirm('Leave without saving these changes?'))return;$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}});
-on('#detSave',async()=>{editable();const next=clone(visit),m={id:cur.id,note:$('#detNote').value.trim(),tag:cur.tag||'',area:$('#detArea').value.trim(),sheet:$('#detSheet').value.trim(),owner:$('#detOwner').value.trim(),due:cur.due||'',itemId:cur.itemId||'',omit:$('#detInclude').checked?'':'1'};
+on('#detLocation',()=>{if(cur&&!isReadonly())openLocation(cur.id,cur.location);});
+on('#detClose',async()=>{const current=JSON.stringify([$('#detNote').value,$('#detSheet').value,$('#detOwner').value,cur.tag,cur.due,cur.itemId||'',$('#detInclude').checked]);if(!isReadonly()&&current!==cur.original&&!confirm('Leave without saving these changes?'))return;$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}});
+on('#detSave',async()=>{editable();const next=clone(visit),m={...((await oneM(cur.id))||{}),id:cur.id,note:$('#detNote').value.trim(),tag:cur.tag||'',sheet:$('#detSheet').value.trim(),owner:$('#detOwner').value.trim(),due:cur.due||'',itemId:cur.itemId||'',omit:$('#detInclude').checked?'':'1'};
  const origin=next.items.find(i=>i.photoId===cur.id);
  if(origin&&!['Issue','Action','Safety'].includes(m.tag))throw new Error('This photo has a tracked item. Keep its Issue, Action or Safety tag and close the item from Review items when resolved.');
  next.items.forEach(i=>i.followupPhotoIds=(i.followupPhotoIds||[]).filter(id=>id!==cur.id));
  let item=origin||next.items.find(i=>i.id===m.itemId);
  if(!item&&['Issue','Action','Safety'].includes(m.tag)){item=newItem(next,{photoId:cur.id,firstNoted:cur.ts});next.items.push(item);}
- if(item){m.itemId=item.id;if(item.photoId===cur.id){Object.assign(item,{note:m.note,owner:m.owner,due:m.due,area:m.area,tag:m.tag});}else if(!item.followupPhotoIds.includes(cur.id))item.followupPhotoIds.push(cur.id);}
+ if(item){m.itemId=item.id;if(item.photoId===cur.id){Object.assign(item,{note:m.note,owner:m.owner,due:m.due,area:photoLocation(m),tag:m.tag});}else if(!item.followupPhotoIds.includes(cur.id))item.followupPhotoIds.push(cur.id);}
  await transaction(['meta','visits'],'readwrite',tx=>{tx.objectStore('meta').put(m);tx.objectStore('visits').put(next);});visit=next;readyBlob=null;
- if(m.area){area=m.area;recent=[area,...recent.filter(a=>a!==area)].slice(0,8);saveAreas();paintArea();}$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}else await openGal();});
+ $('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}else await openGal();});
 on('#detDel',async()=>{if(!captureComment&&!confirm('Remove this photo from the working report? Issued copies stay in report history.'))return;await deletePhoto(cur.id);await refreshCount();$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}else await openGal();});
 /* Items are copied into each visit. Completed visits never read later statuses. */
 async function openItems(fromStart){await captureTask;itemsFromStart=fromStart;await paintItems();$('#itemsSheet').classList.add('open');}
@@ -386,14 +416,12 @@ on('#busyClose',()=>$('#busyWrap').classList.remove('show'));
 async function buildReport(){await captureTask;
  if(!visit.closed||visit.editing){const unreviewed=visit.items.filter(i=>i.status==='Not reviewed').length;if(unreviewed&&!confirm(unreviewed+' item(s) are not reviewed. Continue with that status shown?')){await openItems(false);return;}}
  stopCamera();$('#busyText').textContent='Preparing Word report';$('#busyClose').style.display='none';$('#busyWrap').classList.add('show');
- try{await prepareCurrentReport();$('#doneName').textContent=readyName;$('#doneNote').textContent=isReadonly()?'Share the issued Word report, then save the complete visit package.':'Draft report. Mark Issued here before sharing and saving your final record.';$('#reviewIssue').hidden=isReadonly();setCard('#reviewIssue',visit.editing?'Finalize Edits':'Mark Issued','check','Preserve the final report before sharing');$('#done').classList.add('open');}
+ try{await prepareCurrentReport();$('#doneName').textContent=readyName;paintReportShare();$('#doneNote').textContent=isReadonly()?'Share the issued Word report, then save the complete visit package.':'Draft report. Mark Issued here before sharing and saving your final record.';$('#reviewIssue').hidden=isReadonly();setCard('#reviewIssue',visit.editing?'Finalize Edits':'Mark Issued','check','Preserve the final report before sharing');$('#done').classList.add('open');}
  catch(e){showError(e);}finally{$('#busyWrap').classList.remove('show');}
 }
 on('#galBuild',async()=>{if(visit.walkFinishedAt)await openReview();else await finishWalk();});on('#galExport',buildReport);
 function download(blob,name){const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},30000);}
 on('#doneSave',()=>{if(readyBlob){download(readyBlob,readyName);$('#doneNote').textContent='Download requested. Confirm the file is saved before completing the visit.';}});
-on('#doneShare',async()=>{if(!readyBlob)return;const file=new File([readyBlob],readyName,{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
- try{if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:readyName});$('#doneNote').textContent='File shared. Complete the visit when you are finished.';}else{download(readyBlob,readyName);$('#doneNote').textContent='Download requested. Confirm the file is saved before completing the visit.';}}catch(e){if(e.name!=='AbortError')throw e;}});
 on('#doneClose',()=>$('#done').classList.remove('open'));on('#doneStart',backToStart);
 /* Portable backup. Restore validates first, then replaces all stores in one transaction. */
 function blobData(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});}
@@ -409,10 +437,11 @@ function validateBackup(raw){
  const d=raw.data,maps={};
  for(const n of STORES){if(!Array.isArray(d[n]))throw new Error('Backup is missing '+n+'.');maps[n]=new Map();for(const r of d[n]){if(!r||!Number.isSafeInteger(r.id)||r.id<1||maps[n].has(r.id))throw new Error('Invalid or duplicate record in '+n+'.');maps[n].set(r.id,r);}}
  const str=(v)=>typeof v==='string';const validDate=v=>Number.isFinite(v)&&v>0;
- const keys=new Set();for(const p of d.projects){if(!str(p.name)||!p.name.trim()||!str(p.number)||!str(p.key)||keys.has(p.key))throw new Error('Invalid or duplicate project.');keys.add(p.key);}
+ const keys=new Set();for(const p of d.projects){if(!str(p.name)||!p.name.trim()||!str(p.number)||!str(p.key)||keys.has(p.key)||(p.locations!=null&&!(Array.isArray(p.locations)&&p.locations.every(str))))throw new Error('Invalid or duplicate project.');keys.add(p.key);}
  const nums=new Set(),active=new Set();
  for(const v of d.visits){if(v.schema!==9||!maps.projects.has(v.projectId)||!Number.isInteger(v.num)||v.num<1||!validDate(v.date)||!Array.isArray(v.items)||!Number.isInteger(v.itemSeq)||v.itemSeq<0||typeof v.closed!=='boolean')throw new Error('Invalid visit in backup.');
  for(const k of ['project','projNum','attendees','preparedBy','weather','temp'])if(!str(v[k]))throw new Error('Invalid visit details.');
+ if((v.currentLocation!=null&&!str(v.currentLocation))||(v.reportOrder!=null&&!['location','time'].includes(v.reportOrder))||(v.photosSavedIds!=null&&!(Array.isArray(v.photosSavedIds)&&v.photosSavedIds.every(Number.isSafeInteger))))throw new Error('Invalid visit details.');
  const n=v.projectId+':'+v.num;if(nums.has(n))throw new Error('Duplicate visit number.');nums.add(n);
  if(!v.closed||v.editing){if(active.has(v.projectId))throw new Error('More than one unfinished visit for a project.');active.add(v.projectId);}
  if(v.history!=null)validateReportHistory(v,maps);
@@ -422,7 +451,7 @@ function validateBackup(raw){
  if(!Array.isArray(it.followupPhotoIds))throw new Error('Invalid item photos.');
  for(const id of [it.photoId,...it.followupPhotoIds].filter(id=>id!=null)){const photo=maps.photos.get(id);if(!photo||maps.visits.get(photo.visitId)?.projectId!==v.projectId)throw new Error('An item references a missing photo or another project.');}
  }}}
- for(const m of d.meta){if(!maps.photos.has(m.id))throw new Error('Photo notes reference a missing photo.');for(const k of NOTE_KEYS)if(m[k]!=null&&!str(m[k]))throw new Error('Invalid photo notes.');}
+ for(const m of d.meta){if(!maps.photos.has(m.id))throw new Error('Photo notes reference a missing photo.');for(const k of [...NOTE_KEYS,'area','excluded'])if(m[k]!=null&&!str(m[k]))throw new Error('Invalid photo notes.');}
  for(const p of d.photos){if(raw.version===2&&p.archived===true&&p.data===null){if(!maps.visits.has(p.visitId)||!validDate(p.ts))throw new Error('Invalid archived photo.');delete p.blob;continue;}if(!maps.visits.has(p.visitId)||!validDate(p.ts)||!str(p.data)||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(p.data))throw new Error('Invalid photo in backup.');const [header,encoded]=p.data.split(',');let bytes;try{bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));}catch{throw new Error('A photo is damaged in the backup.');}if(!bytes.length)throw new Error('Backup contains an empty photo.');p.blob=new Blob([bytes],{type:header.slice(5,header.indexOf(';'))});delete p.data;delete p.archived;}
  return d;
 }
@@ -444,6 +473,6 @@ async function setupUpdates(){if(!('serviceWorker'in navigator))return;
 }
 wireCloudUI();
 wireWorkflow();
-async function init(){try{db=await openDB();await migrate();await loadState();paintArea();if(!userProfile().name)openProfile(true);setupUpdates().catch(()=>{});}catch(e){$('#sState').textContent='Could not open saved projects. '+e.message;showError(e);}}
+async function init(){try{db=await openDB();await migrate();await loadState();if(!userProfile().name)openProfile(true);setupUpdates().catch(()=>{});}catch(e){$('#sState').textContent='Could not open saved projects. '+e.message;showError(e);}}
 // One editor tab prevents competing visit numbers and conflicting photo or item edits.
 if(navigator.locks){navigator.locks.request('rdg-sitevisit-editor',{ifAvailable:true},async lock=>{if(!lock){$('#sState').textContent='Site Visit is already open in another tab or window. Close that window, then reload this one.';document.querySelectorAll('button').forEach(b=>b.disabled=true);return;}await init();await new Promise(()=>{});});}else init();

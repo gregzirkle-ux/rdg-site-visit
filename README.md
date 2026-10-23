@@ -1,13 +1,13 @@
-# RDG Site Visit v16
+# RDG Site Visit v17
 
 A card-based field workflow for Redline staff. This is a static app for the existing GitHub/Vercel deployment; no new account or hosting service is required.
 
 ## Update
 
 1. Save a backup of current work from the existing app.
-2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `workflow.js` and `workflow.css` and all updated files. Do not nest the folder in the repository.
+2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `photo-order.js` and `ANDROID_TEST.md` and all updated files. Do not nest the folder in the repository. The three duplicate test files at the repository root (`storage-checks.cjs`, `storage-checks (1).cjs`, `archive-checks.cjs`) were removed; delete them from GitHub too. The real copies are in `tests/`.
 3. Let Vercel redeploy at the same website address.
-4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v16**.
+4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v17**.
 
 The app keeps the same IndexedDB database, projects, visit IDs, and numbering. Do not clear website data to update. The same link does not synchronize data between people, devices, or browsers.
 
@@ -17,7 +17,7 @@ The app keeps the same IndexedDB database, projects, visit IDs, and numbering. D
 2. Select a project or choose New Project. Edit Project Details saves name, number, address, client/owner and client contact details for future visits; existing visits keep their recorded fields.
 3. Start New Visit. Report number and date are automatic. Visit Information is available here and at the end.
 4. New Visit offers Visit Information, Open Items, and Continue to Photos. Saving Visit Information returns to New Visit when opened there. Open Items Back returns to New Visit; Continue to Photos starts the camera. Review carried-forward items or continue to photos. Untouched items remain not reviewed.
-5. Take photos. Each photo is saved before the optional comment prompt. Use Save & Next, Skip Comment, or Retake. More Details contains type, area, room/sheet, responsibility, and due date.
+5. Take photos. Each photo is saved before the optional comment prompt. Use Save & Next, Skip Comment, or Retake. The location chip on the camera stamps each photo; the comment screen shows the photo's location and can change it. More Details contains type, sheet/room, responsibility, and due date.
 6. Finish Visit ends the walk and offers Additional Notes. It does not lock editing.
 7. Review & Share collects visit information, photos/comments, open items, additional notes, sharing/saving, and issuance. Take More Photos remains available on working reports.
 
@@ -86,6 +86,8 @@ node tests/workflow-checks.cjs
 node tests/integration-checks.cjs
 node tests/report-checks.cjs
 node tests/layout-checks.cjs
+node tests/location-checks.cjs
+node tests/v17-flow-checks.cjs
 ```
 
 Local checks cover recovery compatibility, immutable snapshots, corrections, R1/R2 sequencing, discarded edits, later-visit independence, restored snapshot references, archived Word re-export, direct share/cancel behavior, and the assembled photo-to-issue event flow using a simulated camera/database. Actual DOCX and ZIP files were generated and independently checked for content and integrity.
@@ -126,3 +128,31 @@ Photos are scaled to fit and never cropped. Safety photos still come first. Page
 **Start.** New Project is a red button.
 
 **Checks.** All earlier checks pass. New checks cover both layouts, landscape, portrait and wide photos, photos left out of the report, the report layout choice, the include toggle and Include all, and the revision rule. Both layouts were rendered with mixed photo shapes and inspected. Screens were checked in portrait and landscape with a simulated camera. Real iPhone rotation, camera resolution and sharing still need a device test.
+
+## v17 location, photo order and Save photos
+
+**Location chip.** The camera's Set area button is now a location chip. It shows the current location, such as Room 204, or Set location. Tap it for the project's saved locations (most recently used first), General (no location), and a field to add a new one. Choosing one sets it and returns to the camera. The × on a row removes it from the list; photos keep their location. Taking photos adds no taps: the comment screen still opens after each photo.
+
+The current location stays on every new photo until changed. It is saved on the visit, so it survives Pause, Resume and closing the app. A new visit starts on Set location; the saved list stays with the project and is included in project recovery files.
+
+**Fixing one photo.** The comment screen has a Location row, and each thumbnail in Photos & Comments has its location underneath. Tapping either changes that photo only. The current location on the camera does not change.
+
+**Report order.** Report photos are grouped by location in the order each location was first visited, oldest to newest within a group. Photos with no location are listed first under General. Each location has a heading; if no photo has a location there are no headings and the report looks like v16. Observation numbers run 001, 002, … in printed order. Safety photos stay in their location, bold red, and the safety summary on page one lists their numbers. Under a heading only the sheet/room repeats with each photo. Photos & Comments shows the same groups and numbers.
+
+Visits issued before v17 keep their original order (safety first, numbered by time), including later edits and revisions, so their ZIP and photo index still match the issued Word copy. Drafts and new visits use location order.
+
+**ZIP and photo index.** Both follow the report order. Filenames include the location, such as `T01_SVR-004_2026-10-22_Obs-003_Room-204.jpg` or `..._Extra-01_General.jpg`. The CSV has a Location column. A location typed in different capitals is grouped together and uses the first spelling.
+
+**Save Photos.** The first, dark tile on Review & Share sends every photo in the visit (report and extra, original quality) to the share sheet. Choose Save Images for the photo album, or OneDrive, Google Drive, iCloud Drive, Dropbox and so on. Large visits go in batches: up to 20 at a time on iPhone, 10 on Android (Chrome's limit is 10 files and about 50 MB per share). Tap Save Next Batch to continue; the tile shows the count. The app records which photos were handed off. Photos added later show as Save N New Photos. Where file sharing is not available, the photos download one at a time.
+
+Leaving Review & Share (Back, Back to Start, or Back to Start after sharing) with unsaved photos shows "Photos not saved yet. Save now?" with Save and Skip. It does not appear during the walk, on Pause, or when only viewing an older issued report.
+
+**Share and Save, Android.** Chrome on Android cannot share Word or ZIP files, only images, PDF, text and media. There the tile reads Download Report: the Word file saves to Downloads, and Open Email starts a message with the subject filled in; attach the report from Downloads. The ZIP tile reads Download ZIP; upload it from your cloud app. On iPhone, Share Report and Share or Save ZIP still open the share sheet; the ZIP can go to a cloud app instead of email.
+
+**Data.** Photo records are written once and never rewritten. Location and the left-out/removed flag are stored in the meta store. Older visits are migrated on first open: area becomes location, the v16 sticky area list becomes the project's saved locations, and a walk in progress keeps its area as the current location. v16 previously rewrote photo records to mark a deleted or discarded photo; that flag now lives in meta and old flags are still read.
+
+**Android.** See `ANDROID_TEST.md`. Pinching on the camera now zooms the camera instead of the page. No iPhone-only code paths were found; sharing, camera and storage use feature detection.
+
+**Not in this build.** Direct SharePoint upload. `photoExportSet` in `cloud.js` produces the ordered, named file list used by the ZIP and Save Photos, so an upload target can reuse it.
+
+**Checks.** All earlier checks pass. New: `location-checks` (grouping, numbering, legacy order, filenames, real Word headings in both layouts, 40 photos with no words) and `v17-flow-checks` (migration, chip and picker, sticky location, per-photo changes, Save Photos batches, reminder, Android Word/ZIP fallback, new visit). In Chromium on an emulated Android phone, a visit was started in v16, upgraded to v17 with real IndexedDB, and taken through the location, Save Photos and report download flow; photo records were unchanged. Real iPhone and Android share sheets, camera and install still need a device test.

@@ -89,7 +89,7 @@ input:focus,textarea:focus,select:focus{border-color:#777;box-shadow:0 0 0 3px #
   .topbar{top:0;bottom:0;left:0;right:auto;width:calc(env(safe-area-inset-left) + 150px);flex-direction:column;flex-wrap:nowrap;
     align-items:stretch;justify-content:center;gap:10px;padding:12px 10px 12px calc(env(safe-area-inset-left) + 10px);
     background:linear-gradient(90deg,rgba(0,0,0,.72),rgba(0,0,0,.25) 75%,rgba(0,0,0,0))}
-  .topbar .chip,#projBtn,#areaBtn{max-width:none;width:100%;flex:0 0 auto;text-align:center}
+  .topbar .chip,#projBtn,#locationBtn{max-width:none;width:100%;flex:0 0 auto;text-align:center}
   .dock{top:0;bottom:0;left:auto;right:0;height:auto;width:calc(env(safe-area-inset-right) + 130px);flex-direction:column;
     justify-content:center;gap:28px;padding:12px calc(env(safe-area-inset-right) + 12px) 12px 12px;
     background:linear-gradient(270deg,rgba(0,0,0,.72),rgba(0,0,0,.25) 75%,rgba(0,0,0,0))}
@@ -100,3 +100,26 @@ input:focus,textarea:focus,select:focus{border-color:#777;box-shadow:0 0 0 3px #
 }
 .metaLines{padding-left:18px;padding-right:18px}
 #layoutSheet{z-index:44}
+
+/* v17 location chip, picker and per-photo location */
+#locationBtn{max-width:none;font-weight:600}
+#camwrap{touch-action:none} /* pinch zooms the camera, not the page (Android Chrome) */
+.areasheet{z-index:50;max-height:85vh;display:flex;flex-direction:column;padding-left:calc(16px + env(safe-area-inset-left));padding-right:calc(16px + env(safe-area-inset-right))}.scrim{z-index:49}
+.locadd{display:flex;gap:10px;align-items:center}.locadd input{margin:0}.locadd .btn{color:var(--ink);padding:9px 6px}
+.loclist{overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:12px;border-top:1px solid var(--line)}
+.locrow{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+.locpick{flex:1;min-width:0;text-align:left;background:none;border:0;padding:15px 4px;font-size:16px;color:var(--ink);min-height:52px;overflow-wrap:anywhere}
+.locrow.on .locpick{font-weight:700}.locrow.on .locpick:before{content:'✓ '}
+.locdel{flex:0 0 auto;width:48px;height:48px;border:0;background:none;color:var(--mute);font-size:22px}
+.locline{display:flex;align-items:center;gap:12px;margin:12px 0 4px;padding:6px 6px 6px 16px;background:#fff;border:1px solid var(--line);border-radius:14px;font-size:15px;font-weight:600;color:var(--ink)}
+.locchip{margin-left:auto;max-width:65%;border:1px solid #77716b;background:#fff;color:var(--ink);border-radius:10px;padding:10px 12px;font-size:15px;min-height:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ghead{grid-column:1/-1;margin:14px 0 2px;font-size:13px;font-weight:700;color:var(--ink);overflow-wrap:anywhere}
+.cloc{display:block;width:100%;border:0;background:none;color:var(--ink-2);font-size:12px;padding:6px 2px;min-height:34px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cloc:before{content:'⌖ ';color:var(--mute)}
+
+/* v17 Save photos: the first and most prominent action on Review & Share */
+.tile.savephotos{width:100%;min-height:104px;margin-top:16px;background:var(--ink);border-color:var(--ink);color:#fff}
+.tile.savephotos svg{color:#fff}.tile.savephotos .sub{color:rgba(255,255,255,.78)}
+.tile.savephotos:active{background:#33302d}
+#savePhotosNote{margin:8px 0 0;min-height:0}
+#saveReminder{z-index:47}#reminderSave{border-color:#77716b}

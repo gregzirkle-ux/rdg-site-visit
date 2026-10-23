@@ -188,12 +188,14 @@ const commentBorders = { top: COMMENT_LINE, bottom: COMMENT_LINE, left: COMMENT_
 
 function stampText(r) { return new Date(r.ts).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }); }
 
-/* Observation heading, location, note (or ruled writing lines), owner and due. */
+/* Observation heading, location, note (or ruled writing lines), owner and due.
+   Under location headings the location is already printed, so only the sheet or room shows. */
+function locLine(r) { return [r.showLocation ? photoLocation(r) : "", r.sheet].filter(Boolean).join("   |   "); }
 function observationText(r, blankLines) {
   const safety = r.tag === "Safety";
   const n = String(r.observationNumber).padStart(3, "0");
   const out = [ p("OBSERVATION " + n + (r.tag ? "   |   " + r.tag.toUpperCase() : ""), { bold: true, size: 20, color: RED }) ];
-  const loc = [r.area, r.sheet].filter(Boolean).join("   |   ");
+  const loc = locLine(r);
   if (loc) out.push(p(loc, { size: 17, color: safety ? RED : GREY, bold: safety, caps: true }));
   if (r.itemRef) out.push(p("Tracked item: " + r.itemRef, { size: 18, bold: true }));
   if (r.note) out.push(p(r.note, { size: 20, after: 120, bold: safety, color: safety ? RED : "101010" }));
@@ -225,7 +227,7 @@ function table(widths, rows) {
 /* Estimated printed height in inches, used only to decide how rows share pages. */
 function textHeight(r, widthIn, blankLines) {
   const perLine = Math.max(10, Math.floor(widthIn * 14));
-  let h = 0.22 + ((r.area || r.sheet) ? 0.19 : 0) + (r.itemRef ? 0.19 : 0) + ((r.owner || r.due) ? 0.19 : 0);
+  let h = 0.22 + (locLine(r) ? 0.19 : 0) + (r.itemRef ? 0.19 : 0) + ((r.owner || r.due) ? 0.19 : 0);
   if (r.note) h += r.note.split("\n").reduce((s, line) => s + Math.max(1, Math.ceil(line.length / perLine)), 0) * 0.19 + 0.1;
   else h += 0.2 + blankLines * 0.33;
   return h + 0.17;
@@ -243,14 +245,33 @@ function compactRow(r) {
     cell(textW, observationText(r, 4), { borders: commentBorders, margins: { top: 120, bottom: 120, left: 160, right: 160 } })
   ]});
 }
-function compactPages(photos) {
+/* Location heading inside the photo pages. It is kept with the first photo below it. */
+const HEADING_H = 0.32;
+function locationHeading(label) {
+  const { Paragraph, TextRun } = D();
+  return new Paragraph({ keepNext: true, spacing: { before: 60, after: 80 },
+    border: { bottom: { style: "single", size: 4, color: "C9C4BD" } },
+    children: [ new TextRun({ text: String(label).toUpperCase(), bold: true, size: 20, color: "101010", font: "Calibri" }) ] });
+}
+/* Three rows per page, two when a long comment is on the page. A heading takes about a third
+   of a row, so a page with headings may hold one row fewer. Groups never share a table. */
+function compactPages(groups) {
   const pages = [];
-  for (let i = 0; i < photos.length;) {
-    const n = photos.slice(i, i + 3).some(r => (r.note || "").length > 450) ? 2 : 3;
-    const group = photos.slice(i, i + n); i += n;
-    pages.push([ table([T(COMPACT.photoCol), TW_PAGE - T(COMPACT.photoCol)], group.map(compactRow)) ]);
+  let page = [], rows = 0, heads = 0, long = false, rowTable = null;
+  const fits = (n, h, isLong) => n <= ((long || isLong) ? 2 : 3) && (n === 1 || n * 2.95 + h * HEADING_H <= 9.2);
+  for (const g of groups) {
+    rowTable = null;
+    g.photos.forEach((r, i) => {
+      const isLong = (r.note || "").length > 450, head = i === 0 && g.label ? 1 : 0;
+      if (page.length && !fits(rows + 1, heads + head, isLong)) { pages.push(page); page = []; rows = 0; heads = 0; long = false; rowTable = null; }
+      if (head) { page.push({ heading: g.label }); heads++; rowTable = null; }
+      if (!rowTable) { rowTable = { rows: [] }; page.push(rowTable); }
+      rowTable.rows.push(r); rows++; long = long || isLong;
+    });
   }
-  return pages;
+  if (page.length) pages.push(page);
+  return pages.map(items => items.map(it => it.heading ? { heading: locationHeading(it.heading) }
+    : table([T(COMPACT.photoCol), TW_PAGE - T(COMPACT.photoCol)], it.rows.map(compactRow))));
 }
 
 /* Layout "large": landscape photos run wide with the comment beside them,
@@ -285,20 +306,27 @@ function largeBlock(b) {
   ]);
 }
 /* Fills pages in photo order. Two portraits in a row share a pair row when it fits;
-   otherwise a portrait takes a single row so pages are not left half empty. */
-function largePages(photos) {
+   otherwise a portrait takes a single row so pages are not left half empty.
+   Pairs never cross a location heading, and a heading stays on the page of its first photo. */
+function largePages(groups) {
   const pages = [];
-  let page = [], used = 0, i = 0;
+  let page = [], used = 0;
   const add = b => { used += b.h + (page.length ? 0.15 : 0); page.push(largeBlock(b)); };
   const room = h => used + h + (page.length ? 0.15 : 0) <= LARGE.budget;
-  while (i < photos.length) {
-    const r = photos[i], next = photos[i + 1];
-    const canPair = r.shape === "portrait" && next && next.shape === "portrait";
-    if (canPair && room(pairHeight(r, next))) { add({ kind: "pair", photos: [r, next], h: pairHeight(r, next) }); i += 2; continue; }
-    if (page.length && room(rowHeight(r))) { add({ kind: r.shape === "portrait" ? "tall" : "wide", photos: [r], h: rowHeight(r) }); i++; continue; }
-    if (page.length) { pages.push(page); page = []; used = 0; continue; }
-    if (canPair) { add({ kind: "pair", photos: [r, next], h: pairHeight(r, next) }); i += 2; }
-    else { add({ kind: r.shape === "portrait" ? "tall" : "wide", photos: [r], h: rowHeight(r) }); i++; }
+  for (const g of groups) {
+    const photos = g.photos;
+    let i = 0, head = g.label ? HEADING_H : 0;
+    const place = () => { if (head) { used += head; page.push({ heading: locationHeading(g.label) }); head = 0; } };
+    while (i < photos.length) {
+      const r = photos[i], next = photos[i + 1];
+      const canPair = r.shape === "portrait" && next && next.shape === "portrait";
+      if (canPair && room(pairHeight(r, next) + head)) { place(); add({ kind: "pair", photos: [r, next], h: pairHeight(r, next) }); i += 2; continue; }
+      if (page.length && room(rowHeight(r) + head)) { place(); add({ kind: r.shape === "portrait" ? "tall" : "wide", photos: [r], h: rowHeight(r) }); i++; continue; }
+      if (page.length) { pages.push(page); page = []; used = 0; continue; }
+      place();
+      if (canPair) { add({ kind: "pair", photos: [r, next], h: pairHeight(r, next) }); i += 2; }
+      else { add({ kind: r.shape === "portrait" ? "tall" : "wide", photos: [r], h: rowHeight(r) }); i++; }
+    }
   }
   if (page.length) pages.push(page);
   return pages;
@@ -324,7 +352,7 @@ function openItemsTable(items) {
   items.forEach((it, i) => {
     const cells = [
       it.ref,
-      (it.note || "Photo item with no description") + (it.area ? "\nArea: " + it.area : "") + (it.update ? "\nThis visit: " + it.update : ""),
+      (it.note || "Photo item with no description") + (it.area ? "\nLocation: " + it.area : "") + (it.update ? "\nThis visit: " + it.update : ""),
       "SVR " + String(it.firstVisitNum).padStart(3,"0") + "\n" + new Date(it.firstNoted).toLocaleDateString(),
       it.owner || "",
       it.due || "",
@@ -354,7 +382,8 @@ async function buildReport(visit, recs) {
   const { Document, Packer, Paragraph, TextRun, ImageRun, Footer, PageNumber, AlignmentType } = D();
 
   const omitted = recs.filter(r => r.omit).length;
-  const sorted = recs.filter(r => !r.omit).map(r => ({...r})).sort((a, b) => a.ts - b.ts);
+  const plan = photoPlan(visit, recs.map(r => ({...r})));
+  const sorted = [...plan.ordered].sort((a, b) => a.ts - b.ts);
   const times = sorted.length
     ? new Date(sorted[0].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) + " to " +
       new Date(sorted[sorted.length - 1].ts).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })
@@ -363,11 +392,10 @@ async function buildReport(visit, recs) {
   const items = visit.legacyReportItems || visit.items || [];
 
   for (const r of sorted) { const item = items.find(it => it.photoId === r.id || (it.followupPhotoIds || []).includes(r.id)); if (item) r.itemRef = item.ref; }
-  sorted.forEach((r,i) => r.observationNumber = i + 1);
-  const safetyPhotos = sorted.filter(r => r.tag === "Safety");
+  for (const r of sorted) { r.observationNumber = plan.numbers.get(r.id); r.showLocation = !plan.headings; }
+  const safetyPhotos = sorted.filter(r => r.tag === "Safety").sort((a, b) => a.observationNumber - b.observationNumber);
   const safetyItems = items.filter(it => it.tag === "Safety" || safetyPhotos.some(r => r.id === it.photoId));
   const otherItems = items.filter(it => !safetyItems.includes(it));
-  const otherPhotos = sorted.filter(r => r.tag !== "Safety");
   const logo = await logoBits();
 
   const body = [
@@ -379,7 +407,7 @@ async function buildReport(visit, recs) {
   if (safetyPhotos.length || safetyItems.length) {
     body.push(p("SAFETY ITEMS: PRIORITY REVIEW", {bold:true, color:RED, size:28, after:160}));
     if (safetyItems.length) body.push(openItemsTable(safetyItems.map(it => ({...it,tag:"Safety"}))));
-    if (safetyPhotos.length) body.push(p("Safety photo observations: " + safetyPhotos.map(r=>String(r.observationNumber).padStart(3,"0")).join(", ") + ". Listed first in Photo Observations.",{bold:true,color:RED,after:120}));
+    if (safetyPhotos.length) body.push(p("Safety photo observations: " + safetyPhotos.map(r=>String(r.observationNumber).padStart(3,"0")).join(", ") + (plan.mode === "time" ? ". Listed first in Photo Observations." : "."),{bold:true,color:RED,after:120}));
     
     body.push(redRule());
   }
@@ -399,17 +427,21 @@ async function buildReport(visit, recs) {
   body.push(p(visit.distribution || "Owner, Contractor, File", { size: 16, color: GREY }));
 
   if (sorted.length) {
-    const ordered = [...safetyPhotos, ...otherPhotos];
-    for (const r of ordered) {
+    for (const r of plan.ordered) {
       try { r.img = await decodePhoto(r.blob); }
       catch (e) { throw new Error("could not read photo " + String(r.observationNumber).padStart(3, "0") + " (" + (e && e.message ? e.message : "unknown") + ")"); }
       r.shape = shapeOf(r.img);
     }
     const layout = LAYOUTS[visit.reportLayout] || LAYOUTS.compact;
-    for (const page of layout.pages(ordered)) {
+    const groups = plan.groups.map(g => ({ label: plan.headings ? g.label : "", photos: g.photos }));
+    for (const page of layout.pages(groups)) {
       body.push(new Paragraph({ pageBreakBefore: true, keepNext: true, spacing: { after: 120 },
         children: [ new TextRun({ text: "PHOTO OBSERVATIONS", bold: true, size: 22 }) ] }));
-      page.forEach((t, i) => { if (i) body.push(p("", { after: 160 })); body.push(t); });
+      page.forEach((t, i) => {
+        if (t.heading) { if (i) body.push(p("", { after: 100 })); body.push(t.heading); return; }
+        if (i && !page[i - 1].heading) body.push(p("", { after: 160 }));
+        body.push(t);
+      });
     }
   }
   body.push(p("", { after: 0 }));
