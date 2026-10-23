@@ -27,7 +27,9 @@ const run=s=>vm.runInContext('(async()=>{'+s+'})()',ctx),settle=()=>new Promise(
 const click=async id=>{await el(id).click();await settle();await run('await actionQueue;');if(errors.length)throw new Error(errors.join('\n'));};
 const meta=id=>data.meta.find(m=>m.id===id),v2=()=>data.visits.find(v=>v.id===2),proj=()=>data.projects[0];
 const shoot=async()=>{await run('shoot();await captureTask;');assert(el('#det').classList.contains('open'),'comment screen opens after each photo');await click('#captureSkip');};
-const pickRow=async label=>{const row=el('#locationList').children.find(r=>r.children[0].textContent===label);assert(row,'picker row '+label);await row.children[0].click();await settle();await run('await actionQueue;');};
+const wheelLabels=()=>el('#locationWheel').children.map(b=>b.textContent);
+const spinTo=label=>{const i=wheelLabels().indexOf(label);assert(i>=0,'wheel row '+label);el('#locationWheel').scrollTop=i*44;};
+const pickRow=async label=>{spinTo(label);await click('#locationUse');};
 (async()=>{
  const photosBefore=JSON.stringify(data.photos.map(p=>({...p,blob:undefined})));
  await run('await migrate();await loadState();');
@@ -38,7 +40,7 @@ const pickRow=async label=>{const row=el('#locationList').children.find(r=>r.chi
  // 1a-d sticky location.
  await click('#resumeBtn');await click('#setupContinue');assert.equal(el('#locationBtn').textContent,'Level 2');
  await shoot();assert.equal(meta(2).location,'Level 2');
- await click('#locationBtn');assert(el('#locationSheet').classList.contains('open'));assert.equal(el('#locationList').children[0].children[0].textContent,'General (no location)');
+ await click('#locationBtn');assert(el('#locationSheet').classList.contains('open'));assert.equal(wheelLabels()[0],'General (no location)');
  el('#locationInput').value='Room 204';await click('#locationAdd');assert(!el('#locationSheet').classList.contains('open'),'selecting returns to the camera');
  assert.equal(v2().currentLocation,'Room 204');assert.equal(el('#locationBtn').textContent,'Room 204');assert.equal(proj().locations[0],'Room 204','most recently used first');
  await shoot();await shoot();assert.equal(meta(3).location,'Room 204');assert.equal(meta(4).location,'Room 204','location stays set for every new photo');
@@ -46,7 +48,9 @@ const pickRow=async label=>{const row=el('#locationList').children.find(r=>r.chi
  await run('shoot();await captureTask;');await click('#detLocation');assert.equal(el('#locationTitle').textContent,'Location for this photo');await pickRow('Roof');
  assert.equal(meta(5).location,'Roof');assert.equal(v2().currentLocation,'Room 204');assert.equal(el('#detLocation').textContent,'Roof');await click('#captureSkip');assert.equal(meta(5).location,'Roof','skip keeps the picked location');
  // 1e: remove an entry from the saved list.
- await click('#locationBtn');const roofRow=el('#locationList').children.find(r=>r.children[0].textContent==='Roof');await roofRow.children[1].click();await settle();await run('await actionQueue;');
+ await click('#locationBtn');assert.equal(wheelLabels().join('|'),'General (no location)|Level 2|Room 204|Roof','wheel sorted by number, then name');
+ assert.equal(el('#locationWheel').scrollTop,88,'wheel opens on the current location');spinTo('Room 204');el('#locationWheel').children[3].click();assert.equal(el('#locationWheel').scrollTop,132,'tapping a row only spins to it');
+ assert(el('#locationSheet').classList.contains('open'));assert.equal(v2().currentLocation,'Room 204');spinTo('Roof');await click('#locationRemove');
  assert(!proj().locations.includes('Roof'));assert.equal(meta(5).location,'Roof','removing from the list leaves photos alone');await pickRow('Room 204');
  // 1c: survives pause and resume.
  await click('#pauseBtn');assert(!el('#start').classList.contains('hide'));await click('#resumeBtn');await click('#setupContinue');assert.equal(el('#locationBtn').textContent,'Room 204');

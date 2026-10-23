@@ -29,6 +29,9 @@ const visit={project:'Order Test',projNum:'T17',num:3,date:t0,closed:false,revis
  assert.equal(old.mode,'time');same(old.ordered.map(r=>r.id),[5,1,2,3,4,7]);assert.equal(old.numbers.get(5),5);assert.equal(old.headings,false);
  assert.equal(ctx.reportOrderOf({closed:false}),'location');assert.equal(ctx.reportOrderOf({closed:true}),'time');assert.equal(ctx.reportOrderOf({closed:true,reportOrder:'location'}),'location');
  assert.equal(ctx.photoLocation({area:'Legacy area'}),'Legacy area','v16 area is read as location');assert.equal(ctx.photoLocation({location:'',area:'Old'}),'Old');
+ // Wheel order: numbered names by their number, then the rest alphabetically.
+ same(ctx.sortLocations(['Lobby','Room 101','Exterior North','Room 9','Level 2','level 2B','Stair 2']),['Level 2','level 2B','Stair 2','Room 9','Room 101','Exterior North','Lobby']);
+ same(ctx.sortLocations(['B','a','Unit 10.5','Unit 10']),['Unit 10','Unit 10.5','a','B']);
  // No locations at all: one General group and no headings, like v16.
  const plain=ctx.photoPlan(visit,recs.map(r=>({...r,location:''})));assert.equal(plain.headings,false);same(plain.ordered.map(r=>r.id),[1,2,3,4,5,7]);
  // Gallery keeps left-out photos inside their location.

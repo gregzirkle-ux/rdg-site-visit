@@ -8,6 +8,18 @@ function photoLocation(r) {
   return String(value || '').trim();
 }
 function locationKey(name) { return String(name || '').trim().toLowerCase(); }
+/* Saved locations on the wheel: names with a number first, by that number (Level 2, Room 9,
+   Room 101), then names without a number alphabetically. Equal numbers sort by name. */
+function sortLocations(list) {
+  const num = s => { const m = String(s).match(/\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; };
+  const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  return [...list].sort((a, b) => {
+    const x = num(a), y = num(b);
+    if (x !== null && y !== null) return x - y || byName(a, b);
+    if (x !== null || y !== null) return x !== null ? -1 : 1;
+    return byName(a, b);
+  });
+}
 function reportOrderOf(v) {
   if (v && (v.reportOrder === 'location' || v.reportOrder === 'time')) return v.reportOrder;
   return v && (v.closed || v.editing || (v.history && v.history.length)) ? 'time' : 'location';

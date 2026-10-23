@@ -1,4 +1,4 @@
-# Android test checklist (Build v17)
+# Android test checklist (Build v17.1)
 
 Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the phone model and Android version. For each step, write OK or describe what happened, and take a screenshot of anything unexpected.
 
@@ -7,7 +7,7 @@ Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the ph
 1. Open the Site Visit link in Chrome.
 2. Chrome menu (⋮) → **Add to Home screen** or **Install app** → Install.
 3. Open the app from the home screen icon. It should open full screen with no address bar.
-4. On Start, the bottom line should read **Build v17**.
+4. On Start, the bottom line should read **Build v17.1**.
 
 ## 2. Setup
 
@@ -18,12 +18,12 @@ Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the ph
 
 ## 3. Camera and location
 
-9. The top bar shows **Set location**. Tap it. A list opens with **General (no location)** and a box to add a location.
-10. Type `Room 101` and tap **Add**. The list closes and the chip reads **Room 101**.
+9. The top bar shows **Set location**. Tap it. A panel opens with a box to add a location and a wheel showing **General (no location)**.
+10. Type `Room 101` and tap **Add**. The panel closes and the chip reads **Room 101**.
 11. Take a photo. The comment screen opens. Its Location row reads Room 101. Tap **Skip Comment**.
 12. Take two more photos and skip both. The chip still reads Room 101.
-13. Tap the chip and add `Exterior North`. Take two photos.
-14. On the second Exterior North photo's comment screen, tap the Location button and choose **Room 101**. Check that the button now reads Room 101. Skip. The camera chip must still read **Exterior North**.
+13. Tap the chip and add `Exterior North`, then add `Room 9` and `Lobby` the same way. Open the chip again: the wheel should read General, Room 9, Room 101, Exterior North, Lobby. Flick the wheel; it should spin smoothly and stop with one name in the middle band. Spin to **Exterior North** and tap **Use this location**. Take two photos.
+14. On the second Exterior North photo's comment screen, tap the Location button, spin to **Room 101** and tap **Use this location**. Check that the button now reads Room 101. Skip. The camera chip must still read **Exterior North**.
 15. Pinch on the camera picture. The camera should zoom in; the page itself must not zoom. Tap 1x to reset.
 16. Turn the phone sideways (auto-rotate on). The controls move to the sides and photos still save. Take one photo in landscape, then turn back.
 17. Tap **Pause**, close the app fully (swipe it away from recent apps), reopen it, tap **Resume Visit** → Continue to Photos. The chip must still read **Exterior North**.
@@ -31,7 +31,7 @@ Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the ph
 ## 4. Photos & Comments
 
 18. Tap the thumbnail (bottom left). Photos are grouped under **Room 101** and **Exterior North** headings with numbers 001, 002, …
-19. Under one photo, tap its location label and choose **General (no location)**. A **General** group appears at the top.
+19. Under one photo, tap its location label, spin to **General (no location)** and tap **Use this location**. A **General** group appears at the top.
 20. Tap Back.
 
 ## 5. Finish and Save Photos
@@ -75,6 +75,7 @@ These could only be checked in desktop Chromium with an emulated Android screen 
 - Whether any gallery app offers "save to gallery" from the share sheet. On Android this is usually Google Photos (upload) or Files; there is no Save Images button like iPhone's.
 - The download notice and Downloads location for the Word report and ZIP in an installed app.
 - **Open Email** opening the default email app from the installed app.
+- How the location wheel feels to flick on a real touchscreen (it was spun with a mouse wheel in testing).
 - Real camera resolution, autofocus, native zoom and rotation on Android hardware.
 - Install prompt wording, which varies by Chrome version and phone maker.
 - The Android back gesture: the app keeps no back history, so back leaves the app. Work is saved, but this has not been tried on a device.

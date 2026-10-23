@@ -7,7 +7,7 @@ A card-based field workflow for Redline staff. This is a static app for the exis
 1. Save a backup of current work from the existing app.
 2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `photo-order.js` and `ANDROID_TEST.md` and all updated files. Do not nest the folder in the repository. The three duplicate test files at the repository root (`storage-checks.cjs`, `storage-checks (1).cjs`, `archive-checks.cjs`) were removed; delete them from GitHub too. The real copies are in `tests/`.
 3. Let Vercel redeploy at the same website address.
-4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v17**.
+4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v17.1**.
 
 The app keeps the same IndexedDB database, projects, visit IDs, and numbering. Do not clear website data to update. The same link does not synchronize data between people, devices, or browsers.
 
@@ -131,9 +131,11 @@ Photos are scaled to fit and never cropped. Safety photos still come first. Page
 
 ## v17 location, photo order and Save photos
 
-**Location chip.** The camera's Set area button is now a location chip. It shows the current location, such as Room 204, or Set location. Tap it for the project's saved locations (most recently used first), General (no location), and a field to add a new one. Choosing one sets it and returns to the camera. The × on a row removes it from the list; photos keep their location. Taking photos adds no taps: the comment screen still opens after each photo.
+**Location chip.** The camera's Set area button is now a location chip. It shows the current location, such as Room 204, or Set location. Tap it for a spinning wheel of the project's saved locations, with General (no location) at the top and a field to add a new one. Spin to a location and tap **Use this location**; that sets it and returns to the camera. Typing a new name and tapping Add sets it straight away. **Remove** takes the centred location off the list after a confirmation; photos keep their location. Taking photos adds no taps: the comment screen still opens after each photo.
 
 The current location stays on every new photo until changed. It is saved on the visit, so it survives Pause, Resume and closing the app. A new visit starts on Set location; the saved list stays with the project and is included in project recovery files.
+
+**Wheel order (v17.1).** Locations with a number come first, sorted by that number (Level 2, Stair 3, Room 9, Room 101); locations without a number follow alphabetically (Exterior North, Lobby, Roof). Locations with the same number sort by name. The same wheel is used from the camera chip, the comment screen and the gallery.
 
 **Fixing one photo.** The comment screen has a Location row, and each thumbnail in Photos & Comments has its location underneath. Tapping either changes that photo only. The current location on the camera does not change.
 
