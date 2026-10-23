@@ -6,13 +6,17 @@ function fileStem(value) {
   return String(value || 'Project').normalize('NFKC').replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/[. ]+$/g, '').slice(0, 90) || 'Project';
 }
 function visitStem(v) { return fileStem(v.projNum || v.project) + '_SVR-' + String(v.num).padStart(3, '0') + (v.revision?'-R'+v.revision:'') + '_' + dateInput(v.date); }
-function photoFilename(v, r, index) { return visitStem(v) + '_Obs-' + String(index + 1).padStart(3, '0') + (r.blob?.type === 'image/png' ? '.png' : r.blob?.type === 'image/webp' ? '.webp' : '.jpg'); }
-/* Report photos keep their observation numbers; photos left out of the report are named Extra. */
-function photoNames(v, photos) {
-  let obs = 0, extra = 0;
-  return photos.map(r => r.omit
-    ? { name: visitStem(v) + '_Extra-' + String(++extra).padStart(2, '0') + (r.blob?.type === 'image/png' ? '.png' : r.blob?.type === 'image/webp' ? '.webp' : '.jpg'), obs: '' }
-    : { name: photoFilename(v, r, obs), obs: ++obs });
+function photoExt(r) { return r.blob?.type === 'image/png' ? '.png' : r.blob?.type === 'image/webp' ? '.webp' : '.jpg'; }
+function locationStem(name) { return fileStem(name || 'General').replace(/[\s-]+/g, '-').slice(0, 40).replace(/[-.]+$/g, '') || 'General'; }
+/* One ordered list of a visit's photos with their export names, used by the ZIP, the photo
+   index and Save photos (and any later upload target). Report photos come first in report
+   order with their observation numbers; photos left out of the report follow as Extra. */
+function photoExportSet(v, photos) {
+  const plan = photoPlan(v, photos);let extra = 0;
+  return [...plan.ordered.map(r => ({ rec: r, obs: plan.numbers.get(r.id), tag: '_Obs-' + String(plan.numbers.get(r.id)).padStart(3, '0') })),
+          ...plan.extras.map(r => ({ rec: r, obs: '', tag: '_Extra-' + String(++extra).padStart(2, '0') }))]
+    .map(e => { const k = locationKey(photoLocation(e.rec)), location = k ? plan.labels.get(k) : '';
+      return { rec: e.rec, obs: e.obs, inReport: e.obs !== '', location, name: visitStem(v) + e.tag + '_' + locationStem(location) + photoExt(e.rec) }; });
 }
 function csvCell(value) {
   let text = String(value ?? '');
@@ -73,15 +77,15 @@ async function openCloud() {
     const v = snapshot.visits.find(v => v.id === visit.id);
     if (!v) throw new Error('This visit is no longer available.');
     const meta = new Map(snapshot.meta.map(m => [m.id, m]));
-    const photos = snapshot.photos.filter(p => p.visitId === v.id && !p.excluded).sort((a,b) => a.ts-b.ts).map(p => joinMeta(p, meta.get(p.id)));
+    const photos = snapshot.photos.filter(p => p.visitId === v.id).map(p => joinMeta(p, meta.get(p.id))).filter(p => !p.excluded);
     const missing = photos.filter(p => !p.blob?.size).length;
     if(missing)throw new Error('This visit has photos removed from the phone. Use its saved ZIP or restore the project recovery file before creating another complete archive.');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const issued=v.closed&&!v.editing?v.history?.at(-1):null;
     const report = new File([issued?.reportData?reportBlob(issued.reportData):await window.SVReport.buildReport(clone(v), photos)], window.SVReport.reportFileName(v), {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-    const names = photoNames(v, photos);
-    const imageFiles = photos.flatMap((p, i) => p.blob?.size ? [new File([p.blob], names[i].name, {type:p.blob.type})] : []);
-    const lines = [['Filename','Observation','In report','Photo time','Area','Sheet / room','Tag','Note','Owner','Due','On this phone'], ...photos.map((p,i) => [names[i].name,names[i].obs,p.omit?'No':'Yes',new Date(p.ts).toISOString(),p.area,p.sheet,p.tag,p.note,p.owner,p.due,p.blob?.size?'Yes':'Removed'])];
+    const set = photoExportSet(v, photos);
+    const imageFiles = set.map(e => new File([e.rec.blob], e.name, {type:e.rec.blob.type}));
+    const lines = [['Filename','Observation','In report','Location','Photo time','Sheet / room','Tag','Note','Owner','Due','On this phone'], ...set.map(({rec:p,name,obs,location}) => [name,obs,p.omit?'No':'Yes',location||'General',new Date(p.ts).toISOString(),p.sheet,p.tag,p.note,p.owner,p.due,'Yes'])];
     const index = new File(['\uFEFF'+lines.map(row=>row.map(csvCell).join(',')).join('\r\n')], visitStem(v)+'_Photo-Index.csv', {type:'text/csv'});
     // This copy holds only the selected project, including history required by recurring items.
     const recovery = await projectRecoveryFile(snapshot, stamp);
@@ -91,7 +95,9 @@ async function openCloud() {
     const card = document.createElement('article'); card.className = 'itemcard';
     const heading = document.createElement('h3'); heading.textContent = archive.name + ' · ' + (archive.size / 1048576).toFixed(1) + ' MB';
     const contents = document.createElement('p'); contents.textContent = 'Includes Report, Photos (' + imageFiles.length + '), Photo-Index and Recovery folders.';
-    const save = saveFileButton([archive], 'Save ZIP to Files', $('#cloudStatus')); save.className = 'tile';setCard(save,'Save Package','folder','Choose your destination');
+    const shareable = (() => { try { return !!navigator.canShare?.({files:[archive]}); } catch { return false; } })();
+    const save = saveFileButton([archive], 'Save ZIP to Files', $('#cloudStatus')); save.className = 'tile';
+    setCard(save, shareable ? 'Share or Save ZIP' : 'Download ZIP', 'folder', shareable ? 'Files, OneDrive, Google Drive, Dropbox or email' : 'Saves to Downloads. Upload it from your cloud app.');
     const fallback = document.createElement('button'); fallback.className = 'tile'; fallback.textContent = 'Download ZIP';
     const alternatives=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Other save options';alternatives.append(summary,fallback);
     fallback.onclick = () => { download(archive, archive.name); $('#cloudStatus').textContent = 'Download requested. Move the ZIP to your project folder at your preferred destination and check the upload finishes.'; };
@@ -161,7 +167,7 @@ function remapProjectCopy(data, existing) {
     const r={...v,id:vmap.get(v.id),projectId,items:mapItems(v.items)};
     if(v.legacyReportItems)r.legacyReportItems=mapItems(v.legacyReportItems);
     if(v.history)r.history=v.history.map(h=>({...h,visit:{...h.visit,id:vmap.get(h.visit.id),projectId,items:mapItems(h.visit.items),...(h.visit.legacyReportItems?{legacyReportItems:mapItems(h.visit.legacyReportItems)}:{})},photos:h.photos.map(p=>({...p,id:pmap.get(p.id),visitId:vmap.get(p.visitId),itemId:items.get(p.itemId)||''}))}));
-    delete r.cloudCheckedAt;return r;
+    delete r.cloudCheckedAt;delete r.photosSavedIds;delete r.photosSavedAt;return r;
   });
   return {oldProjectId:old?.id,projects:[{...source,id:projectId}],visits,
     photos:data.photos.map(p=>({...p,id:pmap.get(p.id),visitId:vmap.get(p.visitId)})),

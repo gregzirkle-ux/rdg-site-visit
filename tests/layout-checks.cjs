@@ -4,7 +4,7 @@ const root=path.resolve(__dirname,'..'),docx=require(path.join(root,'docx.umd.js
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==','base64');
 const shapes=new Map();
 const ctx={window:{docx,SVReportDecode:async blob=>({buf:png.buffer.slice(png.byteOffset,png.byteOffset+png.length),...shapes.get(blob)})},Blob,File,Date,Uint8Array,Uint32Array,TextEncoder,fetch:async()=>({ok:false})};
-vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(root,'report.js'),'utf8'),ctx);
+vm.createContext(ctx);for(const f of ['photo-order.js','report.js'])vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
 function documentXml(buf){ // minimal zip reader for word/document.xml
  let i=buf.lastIndexOf(Buffer.from([0x50,0x4b,0x05,0x06]));const n=buf.readUInt16LE(i+10);let p=buf.readUInt32LE(i+16);
  for(let k=0;k<n;k++){const method=buf.readUInt16LE(p+10),csize=buf.readUInt32LE(p+20),nl=buf.readUInt16LE(p+28),el=buf.readUInt16LE(p+30),cl=buf.readUInt16LE(p+32),off=buf.readUInt32LE(p+42),name=buf.toString('utf8',p+46,p+46+nl);
