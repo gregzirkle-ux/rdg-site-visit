@@ -1,15 +1,31 @@
-# RDG Site Visit v17
+# RDG Site Visit v18
 
 A card-based field workflow for Redline staff. This is a static app for the existing GitHub/Vercel deployment; no new account or hosting service is required.
 
 ## Update
 
-1. Save a backup of current work from the existing app.
-2. Extract this ZIP and upload the **contents** of `rdg-site-visit` to the root of the existing GitHub repository. Include the new `photo-order.js` and `ANDROID_TEST.md` and all updated files. Do not nest the folder in the repository. The three duplicate test files at the repository root (`storage-checks.cjs`, `storage-checks (1).cjs`, `archive-checks.cjs`) were removed; delete them from GitHub too. The real copies are in `tests/`.
-3. Let Vercel redeploy at the same website address.
-4. In Settings & Recovery, choose Check for App Update, install, return to Start, and reopen. Confirm **Build v17.1**.
+1. On your phone, open the current app and use Settings & Recovery, Save All App Data, to keep a copy first.
+2. Extract this ZIP and upload the **contents** of the `rdg-site-visit` folder to the root of the existing GitHub repository, replacing the files with the same names. Include the new `tests/v18-checks.cjs`. Do not nest the folder.
+3. Let Vercel redeploy at the same address.
+4. On Start, tap Check for app update, install, and reopen. The bottom line reads **Build v18**.
 
-The app keeps the same IndexedDB database, projects, visit IDs, and numbering. Do not clear website data to update. The same link does not synchronize data between people, devices, or browsers.
+The database, projects, visit numbers and photos are unchanged by this update.
+
+## v18 at a glance
+
+**Start.** One red button always shows the next step: Start SVR-00X, or Continue SVR-00X with its photo count. The project is a title block; tap it to switch projects. New project and Project details sit under it. Past reports, Backup and restore, Your information, Phone storage and Check for app update are plain rows below.
+
+**Backup and restore.** Replaces Settings & Recovery, Restore Project and Advanced Device Backup. Create backup file builds one file with every project, visit and photo; Save backup file opens the share menu so the user picks the destination (OneDrive suggested, iCloud Drive and Google Drive also fine). Android Chrome cannot share this file type, so it downloads with instructions. The screen explains why and when to back up, shows the last backup date, and Start shows the row in red when there is work and no backup in 14 days. Restore accepts a full backup or the Recovery file from a visit package. Projects not on the phone are added. For a project already on the phone the user picks Keep the copy on this phone or Use the copy in the file. Nothing is wiped. The app also asks the browser to keep its storage persistent.
+
+**Wrap up.** Finish Visit leads to Review and Send, three numbered steps: 1 Save the original photos (full quality, for the archive), 2 Check the report (photos, visit information, open items, general notes, layout), 3 Issue and send. Step 1 shows a check once every photo is handed off.
+
+**Send Report.** Shows the file name and size with a plain verdict: small enough to email, or too large. A draft shows a Mark issued box first. Email Report opens the share menu. Send as a link walks through three steps: save the report to OneDrive, iCloud Drive or Google Drive, copy a share link (instructions for each service), paste it, and Open email with the link writes the subject and message. When the report is too large, Send as a link becomes the main button. Save Visit Package is the project folder ZIP.
+
+**Report size.** The Word report aims for 14.2 MB, so it stays under about 20 MB once emailed (attachments grow by about a third in email). Photos are only resized when needed: 1800 px for most visits, stepping to 1600, 1400, 1200 or 1000 px for large ones. Even 1000 px prints at over 300 dpi in the standard layout, so PDFs stay sharp when zoomed. About 100 photos fit in an email. Originals are never changed; full quality photos go out through Save Photos and the ZIP. Change `EMAIL_LIMIT` in `report.js` if the office limit changes.
+
+**Report.** Page one keeps the masthead and red rule; visit information is now a two column title block so the summary, items, limitations and distribution fit on page one. Photo pages have a running header (project, number, SVR and date), red observation numbers, the type in small capitals, hairlines between rows instead of boxes, and a red bar on location headings, repeated as Continued when a location runs onto the next page. Word editing: the report uses real styles (Heading 1, Heading 2, RDG Body, RDG Comment, RDG Meta, RDG Fine Print), so the look can be changed once in Word's Styles pane and the Navigation Pane lists every location. Tables have fixed widths so typing never shifts photos. A blank comment is an empty RDG Comment paragraph: click and type. The font is set in one place (`FONT` in `report.js`); it is Calibri so it opens the same everywhere, and can be switched to DIN.
+
+**Everywhere.** Plain language, one helper line per screen, grouped rows with icons, larger tap targets, a progress bar while the report builds, and a choice sheet instead of ambiguous OK or Cancel dialogs for restore.
 
 ## Visit workflow
 
@@ -65,15 +81,11 @@ Existing substantive report limitations wording is retained, with its editorial 
 
 ## Storage and recovery
 
-Settings & Recovery contains project restoration, phone storage review, updates, and Advanced Device Backup. Routine storage prompts appear only when cleanup is available.
+Backup and restore is on Start. See v18 at a glance above.
 
-Completed visits become eligible for local photo cleanup after 30 days. Nothing is removed automatically. Working edits are excluded. Photos supporting open items in the latest visit are protected. Exact issued Word copies and metadata remain.
+Completed visits become eligible for local photo cleanup after 30 days (Phone storage). Nothing is removed automatically. Working edits are excluded. Photos supporting open items in the latest visit are protected. Exact issued Word copies and metadata remain.
 
-Recovery JSON contains the selected project's current records, available photos, and issued history, including photos retained for earlier issued versions. It is not limited to the selected visit. Issued Word copies increase recovery size over time. Keep older ZIPs/recovery files when original photos have been removed; newer snapshots cannot recreate those original bytes.
-
-Extract a ZIP and choose the JSON in its Recovery folder to restore. Restoration replaces the matching project's snapshot after confirmation, including any newer work, and keeps other projects. It does not merge. A saved working edit session can also be restored.
-
-Full-device backup/restore covers project records and report history. Device profile/settings remain local to each device. If current report photos are archived, use Report History for an issued Word copy or restore original recovery data before editing/rebuilding a complete package.
+The Recovery JSON inside each visit package holds that project's records, available photos and issued history. Restore it from Backup and restore, Restore from a backup file.
 
 ## Verification
 
@@ -88,6 +100,7 @@ node tests/report-checks.cjs
 node tests/layout-checks.cjs
 node tests/location-checks.cjs
 node tests/v17-flow-checks.cjs
+node tests/v18-checks.cjs
 ```
 
 Local checks cover recovery compatibility, immutable snapshots, corrections, R1/R2 sequencing, discarded edits, later-visit independence, restored snapshot references, archived Word re-export, direct share/cancel behavior, and the assembled photo-to-issue event flow using a simulated camera/database. Actual DOCX and ZIP files were generated and independently checked for content and integrity.

@@ -302,6 +302,7 @@
 
 <div class="scrim" id="scrim"></div>
 <div class="areasheet" id="locationSheet" role="dialog" aria-labelledby="locationTitle">
+  <div class="grabber" aria-hidden="true"></div>
   <div class="row">
     <h3 id="locationTitle">Location</h3>
     <button class="btn right" id="locationDone">Done</button>
@@ -316,111 +317,207 @@
 <section class="sheet" id="vis">
   <div class="sheethead">
     <button class="btn" id="visClose">Back</button>
-    <h2>Visit info</h2>
-    <button class="btn right" id="visSave">Save</button>
+    <h2>Visit Information</h2>
+    <button class="btn right strong" id="visSave">Save</button>
   </div>
   <div class="pad">
-    <label class="lbl" for="vProject" style="margin-top:0">Project</label>
-    <input type="text" id="vProject" placeholder="Project name">
-    <input type="text" id="vNum" placeholder="Project number">
-    <label class="lbl" for="vDate">Visit date</label><input type="date" id="vDate">
-    <label class="lbl" for="vAtt">Present</label>
-    <input type="text" id="vAtt" placeholder="Who you walked with">
-    <label class="lbl" for="vBy">Prepared by</label>
-    <input type="text" id="vBy" placeholder="Your name">
-    <label class="lbl" for="vCompany">Company</label><input type="text" id="vCompany" placeholder=""><label class="lbl" for="vOfficePhone">Office phone</label><input type="tel" id="vOfficePhone"><label class="lbl" for="vPhone">Direct / mobile phone</label><input type="tel" id="vPhone" placeholder=""><label class="lbl" for="vEmail">Email</label><input type="email" id="vEmail" placeholder=""><label class="lbl" for="vWx">Weather</label>
-    <input type="text" id="vWx" placeholder="Fetched automatically">
-    <input type="text" id="vTemp" placeholder="Temperature"><label class="lbl" for="vDistribution">Distribution</label><input type="text" id="vDistribution" placeholder="Owner, Contractor, File">
-    <div class="auto" id="vAuto"></div>
+    <p class="auto" id="vAuto"></p>
+    <div class="formcard">
+      <p class="formhead">Project</p>
+      <label class="lbl" for="vProject">Project name</label>
+      <input type="text" id="vProject" placeholder="Project name">
+      <label class="lbl" for="vNum">Project number</label>
+      <input type="text" id="vNum" placeholder="Project number">
+      <p class="hint">Project name and number come from Project Details on the Start screen.</p>
+    </div>
+    <div class="formcard">
+      <p class="formhead">The visit</p>
+      <label class="lbl" for="vDate">Visit date</label><input type="date" id="vDate">
+      <label class="lbl" for="vAtt">Present</label>
+      <input type="text" id="vAtt" placeholder="Who you walked with">
+      <div class="pair"><div><label class="lbl" for="vWx">Weather</label><input type="text" id="vWx" placeholder="Filled in automatically"></div>
+      <div><label class="lbl" for="vTemp">Temperature</label><input type="text" id="vTemp" placeholder="64 F"></div></div>
+      <label class="lbl" for="vDistribution">Distribution</label><input type="text" id="vDistribution" placeholder="Owner, Contractor, File">
+    </div>
+    <div class="formcard">
+      <p class="formhead">Prepared by</p>
+      <label class="lbl" for="vBy">Name</label>
+      <input type="text" id="vBy" placeholder="Your name">
+      <label class="lbl" for="vCompany">Company</label><input type="text" id="vCompany" placeholder="">
+      <div class="pair"><div><label class="lbl" for="vOfficePhone">Office phone</label><input type="tel" id="vOfficePhone"></div>
+      <div><label class="lbl" for="vPhone">Direct or mobile</label><input type="tel" id="vPhone" placeholder=""></div></div>
+      <label class="lbl" for="vEmail">Email</label><input type="email" id="vEmail" placeholder="">
+    </div>
     <button class="ghost" id="vPause">Pause and go to Start</button>
   </div>
 </section>
 
-<section class="sheet workflow" id="gal"><div class="sheethead"><button class="btn" id="galClose">Back</button><h2>Photos & Comments</h2></div><div class="pad"><p class="contextline" id="galTitle"></p><p class="auto" id="galHelp"></p><button class="ghost" id="galAll" hidden></button><div class="grid" id="grid"></div><div class="empty" id="galEmpty">No photos yet.</div><div class="tiles"><button class="tile" id="galBack" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg><span>Take Photos</span></button><button class="tile" id="galBuild" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/></svg><span>Finish Visit</span></button></div><div hidden><button id="galExport"></button><button id="galItems"></button><button id="galPause"></button><button id="galToStart"></button><button id="galCloud"></button><button id="galInfo"></button><button id="galEnd"></button></div></div></section><!-- detail -->
+<section class="sheet workflow" id="gal"><div class="sheethead"><button class="btn" id="galClose">Back</button><h2>Photos &amp; Comments</h2></div><div class="pad"><p class="contextline" id="galTitle"></p><p class="auto" id="galHelp"></p><button class="ghost" id="galAll" hidden></button><div class="grid" id="grid"></div><div class="empty" id="galEmpty">No photos yet.</div><div class="tiles"><button class="tile" id="galBack"></button><button class="tile cta" id="galBuild"></button></div><div hidden><button id="galExport"></button><button id="galItems"></button><button id="galPause"></button><button id="galToStart"></button><button id="galCloud"></button><button id="galInfo"></button><button id="galEnd"></button></div></div></section>
+
+<!-- photo detail and comment -->
 <section class="sheet" id="det">
   <div class="sheethead">
     <button class="btn" id="detClose">Back</button>
     <h2 id="detTitle">Observation</h2>
-    <button class="btn right" id="detSave">Save</button>
+    <button class="btn right strong" id="detSave">Save</button>
   </div>
   <div class="pad">
     <img class="shot" id="detImg" alt="">
     <div class="meta" id="detMeta"></div>
+    <label class="lbl" for="detNote">Comment</label>
+    <textarea id="detNote" placeholder="Type, or tap the microphone on your keyboard and talk."></textarea>
+    <div class="tiles detacts"><button class="tile cta" id="captureNext"></button><button class="tile" id="captureSkip"></button></div>
     <div class="locline"><span>Location</span><button class="locchip" id="detLocation">General (no location)</button></div>
     <label class="incrow" for="detInclude"><input type="checkbox" id="detInclude" checked><span>Include in report</span></label>
-    <label class="lbl" for="detNote">Note</label>
-    <textarea id="detNote" placeholder="Tap the microphone on your keyboard and talk."></textarea>
-    <details id="photoDetails"><summary>More details</summary><div class="lbl">Type</div>
+    <details id="photoDetails"><summary>Type, sheet, owner and due date</summary><div class="lbl">Type</div>
     <div class="chips" id="tagRow"></div>
     <label class="lbl" for="detSheet">Sheet or room</label>
     <input type="text" id="detSheet" placeholder="A2.01, Room 214">
     <div id="actionBits" style="display:none">
       <label class="lbl" for="detOwner">Owner</label>
-      <input type="text" id="detOwner" placeholder="Who owns it">
+      <input type="text" id="detOwner" placeholder="Who is responsible">
       <div class="lbl">Due</div>
       <div class="chips" id="dueRow"></div>
-      <label class="lbl" for="detDue">Select date</label>
+      <label class="lbl" for="detDue">Or pick a date</label>
       <input type="date" id="detDue" aria-label="Select due date">
     </div>
-    </details><div class="tiles"><button class="tile" id="captureNext" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/></svg><span>Save & Next</span></button><button class="tile" id="captureSkip" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M14 6l6 6-6 6"/></svg><span>Skip Comment</span></button><button class="tile" id="detDel" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6M4 20l2-7L17 2l5 5-11 11z"/></svg><span>Delete Photo</span></button></div><p class="auto" id="captureHint"></p>
+    </details>
+    <div class="tiles quiet"><button class="tile" id="detDel"></button></div><p class="auto" id="captureHint"></p>
   </div>
 </section>
 
-<section class="sheet workflow" id="done"><div class="sheethead"><button class="btn" id="doneClose">Back</button><h2>Share and Save</h2></div><div class="pad"><p class="eyebrow">Finalize, share, and save</p><h3 id="doneName"></h3><p class="auto" id="doneNote"></p><div class="tiles"><button class="tile" id="reviewIssue" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/></svg><span>Mark Issued</span><span class="sub">Preserve this report</span></button><button class="tile" id="doneShare" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3M7 8l5-5 5 5M4 13v8h16v-8"/></svg><span>Share Report</span><span class="sub">Choose your email app</span></button><button class="tile" id="doneEmail" hidden><span>Open Email</span><span class="sub">Then attach the report from Downloads</span></button><button class="tile" id="doneCloud" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h7l2 3h9v12H3z"/></svg><span>Save Visit Package</span><span class="sub">Step 2 · Complete ZIP</span></button><button class="tile" id="doneStart" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8M6 9v12h12V9"/></svg><span>Back to Start</span></button></div><details><summary>Other save options</summary><button class="tile" id="doneSave" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/></svg><span>Download Report</span><span class="sub">Editable Word document</span></button></details><div hidden><button id="doneInfo"></button><button id="doneComplete"></button></div><div class="card"><b>Editing in Word?</b><p class="auto">After editing, replace the draft report in your extracted visit folder with the finished Word document. Word edits do not return to this app.</p></div></div></section><section class="start" id="start">
+<!-- send report -->
+<section class="sheet workflow" id="done"><div class="sheethead"><button class="btn" id="doneClose">Back</button><h2>Send Report</h2></div><div class="pad">
+  <p class="eyebrow" id="doneEyebrow">Word report ready</p>
+  <h3 id="doneName" class="filename"></h3>
+  <div class="sizebar" id="reportSize"></div>
+  <p class="auto" id="doneNote" role="status" aria-live="polite"></p>
+  <div class="callout" id="draftBox">
+    <p><b>This report is a draft.</b> Mark it issued before you send it. The report then reads Issued, and an exact copy is kept in Report History. You can still reopen it later for corrections.</p>
+    <div class="tiles"><button class="tile" id="reviewIssue"></button></div>
+  </div>
+  <p class="listhead">Send</p>
+  <div class="tiles"><button class="tile cta" id="doneShare"></button><button class="tile" id="sendLink"></button><button class="tile" id="doneEmail" hidden></button></div>
+  <p class="listhead">Save to the project folder</p>
+  <div class="tiles"><button class="tile" id="doneCloud"></button></div>
+  <details class="more"><summary>Other options</summary><div class="tiles"><button class="tile" id="doneSave"></button></div></details>
+  <div class="tiles quiet"><button class="tile" id="doneStart"></button></div>
+  <div class="note"><b>Finishing the report in Word?</b> Word edits stay in Word. Save the finished document in the project folder next to the visit package.</div>
+  <div hidden><button id="doneInfo"></button><button id="doneComplete"></button></div>
+</div></section>
+
+<!-- send as a link -->
+<section class="sheet workflow" id="linkSheet"><div class="sheethead"><button class="btn" id="linkBack">Back</button><h2>Send as a Link</h2></div><div class="pad">
+  <p class="auto" id="linkIntro"></p>
+  <ol class="bigsteps">
+    <li><b>Save the report to your cloud</b><p>In the share menu choose <b>Save to Files</b>, then OneDrive, iCloud Drive or Google Drive. Or pick the OneDrive or Google Drive app directly.</p>
+      <div class="tiles"><button class="tile" id="linkSave"></button></div><p class="auto" id="linkSaveNote" role="status" aria-live="polite"></p></li>
+    <li><b>Copy a share link</b><p>Open the file in that cloud app and copy a link that anyone with the link can open.</p>
+      <details class="how"><summary>OneDrive</summary><p>Open the OneDrive app and find the report. Tap the three dots, then <b>Share</b>. Check the link setting says <b>Anyone with the link can view</b>, then tap <b>Copy link</b>.</p></details>
+      <details class="how"><summary>iCloud Drive</summary><p>Open the Files app and find the report. Press and hold it, tap <b>Share</b>, then tap the line under the title and set <b>Who can access</b> to <b>Anyone with the link</b>. Tap <b>Copy Link</b>.</p></details>
+      <details class="how"><summary>Google Drive</summary><p>Open the Google Drive app and find the report. Tap the three dots, then <b>Share</b> and <b>Manage access</b>. Set General access to <b>Anyone with the link</b>, then tap <b>Copy link</b>.</p></details></li>
+    <li><b>Paste the link and send</b><p>The email opens with the link and a short message already written.</p>
+      <div class="pasterow"><input type="url" id="linkInput" placeholder="Paste the link here" autocomplete="off"><button class="btn" id="linkPaste">Paste</button></div>
+      <div class="tiles"><button class="tile cta" id="linkEmail"></button></div><p class="auto" id="linkNote" role="status" aria-live="polite"></p></li>
+  </ol>
+</div></section>
+
+<section class="start" id="start">
   <div class="masthead">
     <img src="icon-512.png" alt="">
-    <div class="wm">REDLINE DESIGN GROUP<b>SITE VISIT</b></div>
+    <div class="wm">REDLINE DESIGN GROUP<b>Site Visit</b></div>
     <div class="svr" id="sNum">SVR 001</div>
   </div>
 
   <div class="sec">
-    <div class="card">
-      <label class="lbl" for="projectSelect">Project</label>
-      <select id="projectSelect" aria-label="Select project"></select>
-      <div id="selectedProjectName" aria-live="polite"></div>
-      <div class="projrow">
-        <button class="btn" id="addProject">New Project</button>
-        <button class="btn" id="editProject">Edit Project Details</button>
+    <div class="projcard">
+      <p class="eyebrow">Project</p>
+      <div class="projpick" id="projPick">
+        <div class="projtext"><div id="selectedProjectName" aria-live="polite"></div><div class="projmeta" id="projMeta"></div></div>
+        <span class="chev" aria-hidden="true"></span>
+        <select id="projectSelect" aria-label="Choose a project"></select>
       </div>
-      <div class="state" id="sState"></div>
+      <div class="projrow">
+        <button class="btn" id="editProject">Project details</button>
+        <button class="btn" id="addProject">New project</button>
+      </div>
     </div>
 
-<div class="tiles actions"><button class="tile" id="resumeBtn" style="display:none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M14 6l6 6-6 6"/></svg><span>Resume Visit</span></button><button class="tile" id="startBtn" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M4 12h16"/></svg><span>Start New Visit</span></button><button class="tile" id="existingBtn"><span>Existing SVRs</span><span class="sub">Select a report for this project</span></button><button class="tile" id="profileBtn" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-3a8 8 0 0 1 16 0v3"/></svg><span>Your Information</span><span class="sub">Saved on this device</span></button></div>    <div class="notice" id="cleanupNotice" hidden>
+    <div class="actions">
+      <button class="tile cta" id="resumeBtn" hidden></button>
+      <button class="tile cta" id="startBtn"></button>
+    </div>
+    <p class="state" id="sState"></p>
+
+    <div class="tiles"><button class="tile" id="existingBtn"></button></div>
+
+    <div class="notice" id="cleanupNotice" hidden>
       <p id="cleanupCount"></p>
       <button class="btn" id="reviewCleanup">Review phone storage</button>
     </div>
 
-
+    <p class="listhead">This phone</p>
+    <div class="tiles">
+      <button class="tile" id="backupBtn"></button>
+      <button class="tile" id="profileBtn"></button>
+      <button class="tile" id="manageStorage"></button>
+      <button class="tile" id="checkUpdate"></button>
+    </div>
+    <div class="auto" id="updateNote"></div>
   </div>
-
-<div class="tools"><details><summary>Settings & Recovery</summary>
-<button class="ghost" id="restoreProject">Restore Project from Recovery File</button>
-<p class="auto">Choose the JSON file from your saved ZIP’s Recovery folder.</p>
-<input hidden type="file" id="projectFile" accept=".json,application/json">
-<button class="ghost" id="manageStorage">Review Phone Storage</button>
-<button class="ghost" id="checkUpdate">Check for App Update</button>
-<div class="auto" id="updateNote"></div>
-<details><summary>Advanced Device Backup</summary>
-<button class="ghost" id="backup">Save All App Data</button><button class="ghost" id="restore">Restore Backup</button>
-<p class="auto">Restore Backup replaces all projects on this device.</p>
-<input hidden type="file" id="restoreFile" accept=".json,application/json"></details>
-</details></div>  <div class="metaLines">
+  <div class="metaLines">
     <span id="sDate"></span><span id="sBuild"></span>
   </div>
 </section>
 
+<!-- backup and restore -->
+<section class="sheet workflow" id="backupSheet"><div class="sheethead"><button class="btn" id="backupClose">Back</button><h2>Backup and Restore</h2></div><div class="pad">
+  <div class="statuscard" id="backupStatus"><span class="dot" aria-hidden="true"></span><div><b id="backupWhen">No backup yet</b><span id="backupWhat"></span></div></div>
+  <p class="listhead">Why back up</p>
+  <p class="auto">Your projects, visits and photos live only on this phone, inside this app. Nothing goes to RDG or the cloud on its own. If the app is deleted, Safari or Chrome data is cleared, or you move to a new phone, that work is gone.</p>
+  <p class="auto">A backup is one file that holds everything. Keep it off this phone and you can bring it all back at any time.</p>
+  <p class="listhead">Back up</p>
+  <div class="tiles"><button class="tile cta" id="backup"></button></div>
+  <div class="readycard" id="backupReady" hidden>
+    <p class="filename" id="backupFile"></p>
+    <div class="tiles"><button class="tile cta" id="backupSave"></button></div>
+  </div>
+  <p class="auto" id="backupNote" role="status" aria-live="polite"></p>
+  <div class="note"><b>Where to keep it.</b> OneDrive is best, because you can open it from any office computer. In the share menu choose <b>Save to Files</b>, then <b>OneDrive</b>, and make a folder called <b>RDG Site Visit Backups</b>. iCloud Drive or Google Drive work too. Do not leave it only in Downloads on this phone; it would be lost with the phone.</div>
+  <div class="note"><b>When.</b> After each visit you issue, or at least once a week. Always before you delete or reinstall the app.</div>
+  <p class="listhead">Restore</p>
+  <p class="auto">Use this after reinstalling the app or on a new phone. Choose your backup file from OneDrive, iCloud Drive, Google Drive or Files. The Recovery file inside a saved visit package works too. Projects already on this phone are kept, and if the file has the same project you choose which copy to keep.</p>
+  <div class="tiles"><button class="tile" id="restore"></button></div>
+  <input hidden type="file" id="restoreFile">
+  <details class="how"><summary>How to reinstall the app safely</summary><ol class="steps">
+    <li>Back up here and save the file to OneDrive.</li>
+    <li>Delete the Site Visit icon from your home screen.</li>
+    <li>Open the Site Visit link in Safari (Chrome on Android) and choose <b>Add to Home Screen</b>.</li>
+    <li>Open the new icon, tap <b>Backup and Restore</b>, then <b>Restore from a backup file</b>.</li>
+  </ol></details>
+</div></section>
+
+<!-- choice dialog -->
+<div class="scrim" id="choiceScrim"></div>
+<div class="areasheet choice" id="choiceSheet" role="dialog" aria-labelledby="choiceTitle">
+  <div class="grabber" aria-hidden="true"></div>
+  <h3 id="choiceTitle"></h3>
+  <p class="auto" id="choiceText"></p>
+  <div class="tiles" id="choiceButtons"></div>
+</div>
+
 <section class="sheet" id="itemsSheet">
- <div class="sheethead"><button class="btn" id="itemsClose">Back</button><h2 id="itemsTitle">Visit items</h2></div>
- <div class="pad"><p class="auto">Review here or continue to the camera. Untouched items remain open and print as not reviewed.</p>
- <div id="itemsList"></div><button class="ghost" id="addItem">Add item without photo</button>
+ <div class="sheethead"><button class="btn" id="itemsClose">Back</button><h2 id="itemsTitle">Open Items</h2></div>
+ <div class="pad"><p class="auto">Mark each carried item Still open or Closed. Items you skip print as not reviewed this visit. Tag a photo Issue, Action or Safety to add a new item.</p>
+ <div id="itemsList"></div><button class="ghost" id="addItem">Add an item without a photo</button>
  <button class="primary" id="itemsContinue" style="margin-top:16px">Continue to Photos</button></div>
 </section>
 
 <section class="sheet" id="itemEditor">
- <div class="sheethead"><button class="btn" id="itemCancel">Back</button><h2>Item details</h2><button class="btn right" id="itemSave">Save</button></div>
+ <div class="sheethead"><button class="btn" id="itemCancel">Back</button><h2>Item Details</h2><button class="btn right strong" id="itemSave">Save</button></div>
  <div class="pad"><label class="lbl" for="itemNote" style="margin-top:0">Description</label><textarea id="itemNote"></textarea>
  <label class="lbl" for="itemOwner">Owner</label><input type="text" id="itemOwner">
- <label class="lbl" for="itemDue">Select date (due date)</label><input type="date" id="itemDue">
+ <label class="lbl" for="itemDue">Due date</label><input type="date" id="itemDue">
  <label class="lbl" for="itemArea">Location</label><input type="text" id="itemArea">
  <label class="lbl" for="itemUpdate">Update for this visit</label><textarea id="itemUpdate"></textarea></div>
 </section>
@@ -428,29 +525,73 @@
 <section class="sheet" id="cloudSheet">
  <div class="sheethead"><button class="btn" id="cloudClose">Back</button><h2>Save Visit Package</h2></div>
  <div class="pad">
-  <h3 id="cloudTitle" style="margin:0;font-size:19px;font-weight:650;letter-spacing:-.2px"></h3>
+  <p class="eyebrow">Everything for the project folder</p>
+  <h3 id="cloudTitle"></h3>
+  <p class="auto">One ZIP file with the Word report, every original photo, a photo index and a recovery file. Save it in the project folder so the visit can be archived to the server.</p>
   <ol class="steps">
-   <li>Save the complete visit ZIP below.</li>
-   <li>Choose <b>Save to Files</b> or your cloud app (OneDrive, Google Drive, Dropbox) and select the project folder. Where sharing a ZIP is not supported, such as Chrome on Android, the ZIP downloads; upload it from Downloads in your cloud app.</li>
-   <li>Extract the ZIP there to reveal the organized SVR folder.</li>
+   <li>Tap <b>Share or Save ZIP</b> below.</li>
+   <li>Choose <b>Save to Files</b>, then OneDrive (or your cloud app), and open the project folder. On Android the ZIP goes to Downloads; upload it from your cloud app.</li>
+   <li>On a computer, extract the ZIP to reveal the organized SVR folder.</li>
   </ol>
-  <p class="cloud-note">Nothing uploads automatically. Saving hands the files to your phone or cloud app; check your destination has finished uploading before removing local copies.</p>
   <p class="cloud-status" id="cloudStatus" role="status" aria-live="polite"></p>
-  <div id="cloudFiles"></div><button class="ghost" id="cloudDone">Back to Visit</button>
-  <button class="ghost" id="cloudChecked">I Checked My Saved Files</button>
+  <div id="cloudFiles"></div>
+  <p class="cloud-note">Nothing uploads by itself. Check the upload has finished in your cloud app before removing photos from this phone.</p>
+  <div class="tiles quiet"><button class="tile" id="cloudChecked"></button><button class="tile" id="cloudDone"></button></div>
   <p class="auto" id="cloudConfirmed" style="margin-top:12px"></p>
  </div>
 </section>
 
 <section class="sheet" id="cleanupSheet">
- <div class="sheethead"><button class="btn" id="cleanupClose">Back</button><h2>Phone storage</h2></div>
- <div class="pad"><p class="cloud-note">Completed visits become eligible 30 days after completion. Nothing is removed automatically. Check the report, photos and recovery file in your cloud before removing a local copy.</p>
- <p class="cloud-note">Visit summaries, numbering and item history stay here. Photos needed by currently open items stay too. To view removed photos or rebuild an old report, restore its project recovery file.</p>
+ <div class="sheethead"><button class="btn" id="cleanupClose">Back</button><h2>Phone Storage</h2></div>
+ <div class="pad"><p class="cloud-note">Completed visits can have their photos removed from this phone 30 days after completion. Nothing is removed automatically. Check the report, photos and visit package are in your cloud before removing a local copy.</p>
+ <p class="cloud-note">Visit summaries, numbering and item history stay here. Photos needed by open items stay too. To view removed photos or rebuild an old report, restore the visit package's recovery file.</p>
  <div id="cleanupList"></div></div>
 </section>
 
-<section class="sheet workflow" id="existingSheet"><div class="sheethead"><button class="btn" id="existingBack">Back</button><h2>Existing SVRs</h2></div><div class="pad"><p id="existingProject" class="auto"></p><p id="existingEmpty" class="auto">No existing reports for this project yet.</p><div id="pastWrap"><div class="tiles" id="pastList"></div></div></div></section><section class="sheet workflow" id="profileSheet"><div class="sheethead"><button class="btn" id="profileClose">Back</button><h2>Your Information</h2></div><div class="pad"><p class="auto">Enter once on this device. Each new visit keeps its own copy.</p><form id="profileForm"><label class="lbl" for="profileName">Name</label><input type="text" id="profileName" placeholder=""><label class="lbl" for="profileCompany">Company</label><input type="text" id="profileCompany" placeholder=""><label class="lbl" for="profileOfficePhone">Office phone</label><input type="tel" id="profileOfficePhone"><label class="lbl" for="profilePhone">Direct / mobile phone</label><input type="tel" id="profilePhone" placeholder=""><label class="lbl" for="profileEmail">Email</label><input type="email" id="profileEmail" placeholder=""><button class="primary" type="submit">Save Information</button></form><p class="auto" id="profileStatus"></p></div></section><section class="sheet workflow" id="projectSheet"><div class="sheethead"><button class="btn" id="projectClose">Back</button><h2 id="projectFormTitle">Edit Project Details</h2></div><div class="pad"><p class="auto" id="projectHelp"></p><form id="projectForm"><label class="lbl" for="projectName">Project name</label><input type="text" id="projectName" placeholder=""><label class="lbl" for="projectNumber">Project number</label><input type="text" id="projectNumber" placeholder=""><label class="lbl" for="projectAddress">Project address</label><input type="text" id="projectAddress"><label class="lbl" for="projectClient">Client / owner</label><input type="text" id="projectClient"><label class="lbl" for="projectContact">Client contact</label><input type="text" id="projectContact"><label class="lbl" for="projectPhone">Client phone</label><input type="tel" id="projectPhone"><label class="lbl" for="projectEmail">Client email</label><input type="email" id="projectEmail"><button class="primary" type="submit">Save Project</button></form></div></section><section class="sheet workflow" id="setupSheet"><div class="sheethead"><button class="btn" id="setupBack">Back</button><h2>New Visit</h2></div><div class="pad"><p class="eyebrow">Before the walk</p><h3 id="setupTitle"></h3><p class="auto">The report number and date are ready. Enter visit details now or complete them after your walk.</p><div class="tiles"><button class="tile" id="setupInfo" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>Visit Information</span><span class="sub">Date, attendees, weather</span></button><button class="tile" id="setupItems"><span>Open Items</span><span class="sub">Review the previous visit</span></button><button class="tile" id="setupNotes"><span>General Notes and Observations</span><span class="sub">Visit summary and conditions</span></button><button class="tile" id="setupContinue" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M14 6l6 6-6 6"/></svg><span>Continue to Photos</span><span class="sub">Begin the walk</span></button></div></div></section><section class="sheet workflow" id="reviewSheet"><div class="sheethead"><button class="btn" id="reviewBack">Back</button><h2>Review & Share</h2></div><div class="pad"><p class="contextline" id="reviewProject"></p><h3 id="reviewTitle"></h3><p class="auto" id="reviewStatus"></p><button class="tile wide savephotos" id="reviewSavePhotos"><span>Save Photos</span></button><p class="auto" id="savePhotosNote" role="status" aria-live="polite"></p><div class="tiles"><button class="tile" id="reviewShare" class-unused=""><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3M7 8l5-5 5 5M4 13v8h16v-8"/></svg><span>Share and Save</span><span class="sub">Word report and complete ZIP</span></button><button class="tile" id="reviewInfo" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>Visit Information</span></button><button class="tile" id="reviewPhotos" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg><span>Photos & Comments</span></button><button class="tile" id="reviewLayout"><span>Report Layout</span></button><button class="tile" id="reviewItems" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/></svg><span>Open Items</span></button><button class="tile" id="reviewNotes" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6M4 20l2-7L17 2l5 5-11 11z"/></svg><span>General Notes and Observations</span></button><button class="tile" id="reviewEdit" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6M4 20l2-7L17 2l5 5-11 11z"/></svg><span>Edit Visit</span></button><button class="tile" id="reviewHistory" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v6h6M3 9a9 9 0 1 1 0 6M12 7v5l3 2"/></svg><span>Report History</span></button><button class="tile" id="reviewCamera" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="3"/></svg><span>Take More Photos</span></button><button class="tile" id="reviewHome" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8M6 9v12h12V9"/></svg><span>Back to Start</span></button></div><p class="auto" id="reviewWord"></p></div></section><section class="sheet workflow" id="notesSheet"><div class="sheethead"><button class="btn" id="notesBack">Back</button><h2>General Notes and Observations</h2></div><div class="pad"><p class="auto">Add an overall summary or anything not tied to a photo. You can come back to this later.</p><label class="lbl" for="visitNotes">Visit notes</label><textarea id="visitNotes" placeholder="Progress, work observed, coordination, and general site conditions"></textarea><div class="tiles"><button class="tile" id="notesSave" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/></svg><span>Save Notes</span></button><button class="tile" id="notesSkip" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M14 6l6 6-6 6"/></svg><span>Skip for Now</span></button></div></div></section><section class="sheet workflow" id="issueSheet"><div class="sheethead"><button class="btn" id="issueBack">Back</button><h2>Finalize Report</h2></div><div class="pad"><p class="auto" id="issueHelp"></p><label class="lbl" for="issueReason">Revision or correction reason</label><textarea id="issueReason" placeholder="Describe what changed"></textarea><div class="tiles"><button class="tile" id="issueOriginal" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/></svg><span>Mark Issued</span></button><button class="tile" id="issueEdits" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12l3 3 7-7"/></svg><span>Save Edits</span><span class="sub">Retain report number</span></button><button class="tile" id="issueRevision" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v6h6M3 9a9 9 0 1 1 0 6M12 7v5l3 2"/></svg><span>Create Revision</span><span class="sub">Keep the original report</span></button><button class="tile" id="issueCancelEdits" ><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6M4 20l2-7L17 2l5 5-11 11z"/></svg><span>Discard Working Edits</span><span class="sub">Restore last issued version</span></button></div></div></section><section class="sheet workflow" id="layoutSheet"><div class="sheethead"><button class="btn" id="layoutBack">Back</button><h2>Report Layout</h2></div><div class="pad"><p class="auto">Choose how photos are arranged in the Word report. You can switch and share again at any time before issuing. Word can still be adjusted after export.</p><div class="layoutchoices"><button class="tile layoutpick" id="layout_compact"><span class="lp-art lp-compact" aria-hidden="true"><i></i><b></b><i></i><b></b><i></i><b></b></span><span>Photo left, comment right</span><span class="sub">Three photos per page in matching rows. Portrait photos are fitted to the same row height.</span></button><button class="tile layoutpick" id="layout_large"><span class="lp-art lp-large" aria-hidden="true"><i></i><b></b><em></em><em></em><u></u><u></u></span><span>Large photos, fitted to shape</span><span class="sub">Landscape photos run large with the comment beside them. Back to back portrait photos pair side by side. Two or three per page.</span></button></div></div></section><section class="sheet workflow" id="historySheet"><div class="sheethead"><button class="btn" id="historyBack">Back</button><h2>Report History</h2></div><div class="pad"><p class="auto">Each issued copy is preserved. Downloads contain the exact Word file saved when issued. Edits to this visit do not change later visits.</p><div id="historyList"></div></div></section><section class="sheet workflow" id="saveReminder"><div class="sheethead"><h2>Save Photos</h2></div><div class="pad"><h3>Photos not saved yet. Save now?</h3><p class="auto" id="reminderNote"></p><div class="tiles"><button class="tile" id="reminderSave"><span>Save</span></button><button class="tile" id="reminderSkip"><span>Skip</span><span class="sub">Go to Start</span></button></div></div></section><div class="busywrap" id="busyWrap"><div>
+<section class="sheet workflow" id="existingSheet"><div class="sheethead"><button class="btn" id="existingBack">Back</button><h2>Past Reports</h2></div><div class="pad"><p id="existingProject" class="contextline"></p><p id="existingEmpty" class="empty">No reports for this project yet.</p><div id="pastWrap"><div class="tiles" id="pastList"></div></div></div></section>
+
+<section class="sheet workflow" id="profileSheet"><div class="sheethead"><button class="btn" id="profileClose">Back</button><h2>Your Information</h2></div><div class="pad"><p class="auto" id="profileIntro">Enter this once on this phone. It fills in Prepared By on every new report. Each report keeps its own copy.</p><form id="profileForm"><div class="formcard"><label class="lbl" for="profileName">Name</label><input type="text" id="profileName" placeholder="" autocomplete="name"><label class="lbl" for="profileCompany">Company</label><input type="text" id="profileCompany" placeholder=""><div class="pair"><div><label class="lbl" for="profileOfficePhone">Office phone</label><input type="tel" id="profileOfficePhone"></div><div><label class="lbl" for="profilePhone">Direct or mobile</label><input type="tel" id="profilePhone" placeholder="" autocomplete="tel"></div></div><label class="lbl" for="profileEmail">Email</label><input type="email" id="profileEmail" placeholder="" autocomplete="email"></div><button class="primary" type="submit">Save</button></form><p class="auto" id="profileStatus"></p></div></section>
+
+<section class="sheet workflow" id="projectSheet"><div class="sheethead"><button class="btn" id="projectClose">Back</button><h2 id="projectFormTitle">Project Details</h2></div><div class="pad"><p class="auto" id="projectHelp"></p><form id="projectForm"><div class="formcard"><p class="formhead">Project</p><label class="lbl" for="projectName">Project name</label><input type="text" id="projectName" placeholder="Hawthorne Lane Residence"><label class="lbl" for="projectNumber">Project number</label><input type="text" id="projectNumber" placeholder="2419"><label class="lbl" for="projectAddress">Address</label><input type="text" id="projectAddress"></div><div class="formcard"><p class="formhead">Client</p><label class="lbl" for="projectClient">Client or owner</label><input type="text" id="projectClient"><label class="lbl" for="projectContact">Contact name</label><input type="text" id="projectContact"><div class="pair"><div><label class="lbl" for="projectPhone">Phone</label><input type="tel" id="projectPhone"></div><div><label class="lbl" for="projectEmail">Email</label><input type="email" id="projectEmail"></div></div></div><button class="primary" type="submit">Save Project</button></form></div></section>
+
+<section class="sheet workflow" id="setupSheet"><div class="sheethead"><button class="btn" id="setupBack">Back</button><h2>New Visit</h2></div><div class="pad">
+  <p class="contextline" id="setupProject"></p><h3 id="setupTitle"></h3>
+  <p class="auto">The report number, date and weather are filled in for you. Everything below is optional and can be done after the walk.</p>
+  <div class="tiles"><button class="tile cta" id="setupContinue"></button></div>
+  <p class="listhead">Optional, before you walk</p>
+  <div class="tiles"><button class="tile" id="setupItems"></button><button class="tile" id="setupInfo"></button><button class="tile" id="setupNotes"></button></div>
+</div></section>
+
+<section class="sheet workflow" id="reviewSheet"><div class="sheethead"><button class="btn" id="reviewBack">Start</button><h2>Review and Send</h2></div><div class="pad">
+  <p class="contextline" id="reviewProject"></p>
+  <div class="titlerow"><h3 id="reviewTitle"></h3><span class="pill" id="reviewPill"></span></div>
+  <p class="auto" id="reviewStatus"></p>
+  <ol class="flow">
+    <li id="stepPhotos"><div class="flowhead"><span class="num">1</span><div><b>Save the original photos</b><span>Full quality copies for the project archive. Choose Save Images, or Save to Files and your OneDrive project folder.</span></div></div>
+      <button class="tile savephotos" id="reviewSavePhotos"><span>Save Photos</span></button><p class="auto" id="savePhotosNote" role="status" aria-live="polite"></p></li>
+    <li id="stepCheck"><div class="flowhead"><span class="num">2</span><div><b>Check the report</b><span>Tap any line to review or edit it.</span></div></div>
+      <div class="tiles"><button class="tile" id="reviewPhotos"></button><button class="tile" id="reviewInfo"></button><button class="tile" id="reviewItems"></button><button class="tile" id="reviewNotes"></button><button class="tile" id="reviewLayout"></button></div></li>
+    <li id="stepSend"><div class="flowhead"><span class="num">3</span><div><b>Issue and send</b><span>Builds the Word report, then email it or send a link.</span></div></div>
+      <div class="tiles"><button class="tile cta" id="reviewShare"></button></div></li>
+  </ol>
+  <div class="tiles quiet"><button class="tile" id="reviewCamera"></button><button class="tile" id="reviewEdit"></button><button class="tile" id="reviewHistory"></button><button class="tile" id="reviewHome"></button></div>
+  <p class="auto" id="reviewWord"></p>
+</div></section>
+
+<section class="sheet workflow" id="notesSheet"><div class="sheethead"><button class="btn" id="notesBack">Back</button><h2>General Notes</h2></div><div class="pad"><p class="auto">An overall summary of the visit: progress, work observed, coordination and site conditions. It prints on the first page of the report. You can come back to this later.</p><label class="lbl" for="visitNotes">General notes and observations</label><textarea id="visitNotes" placeholder="Type, or tap the microphone on your keyboard and talk."></textarea><div class="tiles"><button class="tile cta" id="notesSave"></button><button class="tile" id="notesSkip"></button></div></div></section>
+
+<section class="sheet workflow" id="issueSheet"><div class="sheethead"><button class="btn" id="issueBack">Back</button><h2>Finalize Report</h2></div><div class="pad"><p class="auto" id="issueHelp"></p><label class="lbl" for="issueReason">Revision or correction reason</label><textarea id="issueReason" placeholder="Describe what changed"></textarea><div class="tiles"><button class="tile cta" id="issueOriginal"></button><button class="tile" id="issueEdits"></button><button class="tile" id="issueRevision"></button><button class="tile" id="issueCancelEdits"></button></div></div></section>
+
+<section class="sheet workflow" id="layoutSheet"><div class="sheethead"><button class="btn" id="layoutBack">Back</button><h2>Report Layout</h2></div><div class="pad"><p class="auto">How photos are arranged in the Word report. You can switch any time before issuing, and fine tune in Word afterward.</p><div class="layoutchoices"><button class="tile layoutpick" id="layout_compact"><span class="lp-art lp-compact" aria-hidden="true"><i></i><b></b><i></i><b></b><i></i><b></b></span><span>Photo left, comment right</span><span class="sub">Three photos per page in matching rows. Portrait photos fit the same row height.</span></button><button class="tile layoutpick" id="layout_large"><span class="lp-art lp-large" aria-hidden="true"><i></i><b></b><em></em><em></em><u></u><u></u></span><span>Large photos, fitted to shape</span><span class="sub">Landscape photos run large with the comment beside them. Portrait photos taken back to back pair side by side.</span></button></div></div></section>
+
+<section class="sheet workflow" id="historySheet"><div class="sheethead"><button class="btn" id="historyBack">Back</button><h2>Report History</h2></div><div class="pad"><p class="auto">Every issued copy is kept exactly as it was issued. Editing this visit never changes them or any later visit.</p><div id="historyList"></div></div></section>
+
+<section class="sheet workflow" id="saveReminder"><div class="sheethead"><h2>Save Photos</h2></div><div class="pad"><h3>Save the original photos first?</h3><p class="auto" id="reminderNote"></p><div class="tiles"><button class="tile cta" id="reminderSave"><span>Save</span></button><button class="tile" id="reminderSkip"><span>Skip</span><span class="sub">Go to Start</span></button></div></div></section>
+
+<div class="busywrap" id="busyWrap"><div class="busybox">
+  <div class="spinner" aria-hidden="true"></div>
   <div id="busyText">Building report</div>
+  <div class="busybar" aria-hidden="true"><i id="busyBar"></i></div>
   <button class="ghost" id="busyClose" style="display:none;margin-top:20px">Back</button>
 </div></div>
 

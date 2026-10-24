@@ -1,4 +1,4 @@
-# Android test checklist (Build v17.1)
+# Android test checklist (Build v18)
 
 Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the phone model and Android version. For each step, write OK or describe what happened, and take a screenshot of anything unexpected.
 
@@ -7,7 +7,7 @@ Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the ph
 1. Open the Site Visit link in Chrome.
 2. Chrome menu (⋮) → **Add to Home screen** or **Install app** → Install.
 3. Open the app from the home screen icon. It should open full screen with no address bar.
-4. On Start, the bottom line should read **Build v17.1**.
+4. On Start, the bottom line should read **Build v18**.
 
 ## 2. Setup
 
@@ -80,3 +80,9 @@ These could only be checked in desktop Chromium with an emulated Android screen 
 - Install prompt wording, which varies by Chrome version and phone maker.
 - The Android back gesture: the app keeps no back history, so back leaves the app. Work is saved, but this has not been tried on a device.
 - Samsung Internet and Firefox. Only Chrome is supported for this test.
+
+## v18 additions
+
+35. On Start, tap **Backup and restore**, then **Create backup file**, then **Download backup file**. Confirm a file named `RDG-Site-Visit-Backup_...json` is in Downloads and upload it to Google Drive.
+36. On a second phone or after clearing the app, open Backup and restore, tap **Restore from a backup file**, and pick the file from Google Drive. Confirm the choice sheet appears and the project returns.
+37. Build a report and tap **Send as a link**. Follow the three steps with Google Drive and confirm the email opens with the link in the message.

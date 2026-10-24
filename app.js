@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v17.1';
+const BUILD='v18';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','location','sheet','owner','due','itemId','omit'];
@@ -110,21 +110,35 @@ async function loadState(){
  pending=allVisits.filter(v=>v.projectId===selectedProject&&(!v.closed||v.editing)).pop()||null;
  remember('selectedProject',selectedProject);await paintStart();await paintCleanupNotice();
 }
+/* Start shows one obvious next step: continue the visit in progress, or start the next one. */
 async function paintStart(){
  const select=$('#projectSelect');select.replaceChildren();
- if(!projects.length)select.add(new Option('Select or create a project',''));
+ if(!projects.length)select.add(new Option('No projects yet',''));
  projects.forEach(p=>select.add(new Option(p.name+(p.number?' · '+p.number:''),p.id)));
- select.value=selectedProject==null?'':String(selectedProject);
- $('#editProject').disabled=!currentProject();
+ select.value=selectedProject==null?'':String(selectedProject);select.disabled=!projects.length;
+ const proj=currentProject();$('#editProject').disabled=!proj;$('#editProject').hidden=!proj;
+ $('#selectedProjectName').textContent=proj?proj.name:'No projects yet';
+ $('#projMeta').textContent=proj?[proj.number?'No. '+proj.number:'',proj.address||''].filter(Boolean).join(' · ')||'Tap to switch projects':'Create a project to start your first visit.';
+ $('#projPick').classList.toggle('one',projects.length<2);$('#projPick').classList.toggle('none',!projects.length);
+ setCard('#addProject','New project','plus');
  const pv=allVisits.filter(v=>v.projectId===selectedProject),nextNum=Math.max(0,...pv.map(v=>v.num))+1;
- $('#sDate').textContent=new Date().toLocaleDateString();$('#sBuild').textContent='Build '+BUILD;
- $('#sState').textContent=pending?(pending.editing?'Working edits · ':'Visit in progress · ')+visitLabel(pending):projects.length?'Next visit: '+svr(nextNum):'Create a project to start your first visit.';
+ $('#sDate').textContent=new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});$('#sBuild').textContent='Build '+BUILD;
  $('#resumeBtn').hidden=!pending;$('#startBtn').hidden=!!pending;
- setCard('#resumeBtn',pending?.editing?'Resume Edits':'Resume Visit','arrow',pending?visitLabel(pending):'');
- $('#sNum').textContent=pending?visitLabel(pending):'Next '+svr(nextNum);
- const past=pv.slice().sort((a,b)=>b.num-a.num);$('#existingEmpty').hidden=!!past.length;$('#pastWrap').style.display=past.length?'block':'none';$('#pastList').replaceChildren();
- for(const v of past){const b=document.createElement('button');b.className='tile';const a=document.createElement('span');a.className='pn';a.textContent=visitLabel(v);const d=document.createElement('span');d.className='pd';d.textContent=new Date(v.date).toLocaleDateString()+' · '+(v.editing?'Working edits':!v.closed?'Draft':v.issuedAt?'Issued':'Complete')+' · '+(v.items||[]).filter(i=>i.status!=='Closed').length+' open items'+(v.localPhotosRemovedAt?' · Photos archived':'');b.append(a,d);b.onclick=safe(()=>openPast(v));$('#pastList').append(b);}
+ if(pending){const n=await countFor(pending.id);const when=pending.started||pending.date;
+  setCard('#resumeBtn',(pending.editing?'Continue editing ':'Continue ')+visitLabel(pending),'arrow',pending.editing?'Working edits to an issued report':(n?n+(n===1?' photo':' photos')+' · ':'')+'Started '+(sameDay(when)?fmt(when):new Date(when).toLocaleDateString()));}
+ setCard('#startBtn',proj?'Start '+visitLabel({num:nextNum}):'Create your first project',proj?'camera':'plus',proj?'New site visit · '+new Date().toLocaleDateString([],{month:'short',day:'numeric'}):'Name, number and address');
+ $('#sState').textContent=pending?'This visit is saved on this phone. Pick up where you left off.':'';
+ $('#sNum').textContent=pending?visitLabel(pending)+' open':proj?'Next '+visitLabel({num:nextNum}):'Welcome';
+ const past=pv.slice().sort((a,b)=>b.num-a.num);
+ setCard('#existingBtn','Past reports','history',past.length?past.length+(past.length===1?' report':' reports')+' for this project':'None yet for this project');$('#existingBtn').disabled=!proj;
+ $('#existingEmpty').hidden=!!past.length;$('#pastWrap').style.display=past.length?'block':'none';$('#pastList').replaceChildren();
+ for(const v of past){const b=document.createElement('button');b.className='tile';const open=(v.items||[]).filter(i=>i.status!=='Closed').length;
+  const status=v.editing?'Working edits':!v.closed?'Draft':v.issuedAt?'Issued':'Complete';
+  setCard(b,visitLabel(v)+' · '+new Date(v.date).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}),v.closed&&!v.editing?'check':'edit',status+' · '+(open?open+' open item'+(open===1?'':'s'):'No open items')+(v.localPhotosRemovedAt?' · Photos archived':''));
+  b.onclick=safe(()=>openPast(v));$('#pastList').append(b);}
+ paintBackupRow();
 }
+function sameDay(ts){return new Date(ts).toDateString()===new Date().toDateString();}
 on('#addProject',()=>openProjectForm(false));
 on('#editProject',()=>openProjectForm(true));
 $('#projectSelect').onchange=safe(async()=>{selectedProject=Number($('#projectSelect').value);await loadState();});
@@ -366,7 +380,7 @@ async function openGal(){await captureTask;stopCamera();const recs=await visitPh
  $('#galTitle').textContent=svr(visit.num)+' · '+recs.length+' photos · '+inReport+' in report';$('#galClose').textContent='Back';
  $('#galHelp').textContent=isReadonly()?'Tap a photo to view it.':'Tap a photo to add or edit its comment. Tap the check to leave a photo out of the report.';
  $('#galAll').hidden=isReadonly()||!left;$('#galAll').textContent='Include all '+recs.length+' photos';
- $('#galBack').hidden=isReadonly();$('#galBuild').hidden=isReadonly();setCard('#galBuild',visit.walkFinishedAt?'Review Visit':'Finish Visit','check');
+ $('#galBack').hidden=isReadonly();$('#galBuild').hidden=isReadonly();setCard('#galBack','Take more photos','camera');setCard('#galBuild',visit.walkFinishedAt?'Review and send':'Finish visit','check',visit.walkFinishedAt?'Back to the wrap up checklist':'Done walking? Wrap up the report');
  $('#galBuild').disabled=false;$('#galExport').disabled=false;$('#galItems').textContent=(visit.closed?'View items':'Review items')+' ('+visit.items.filter(i=>i.status!=='Closed').length+' open)';
  const plan=photoPlan(visit,recs),groups=galleryGroups(visit,recs),headings=groups.some(g=>g.key);
  for(const g of groups){if(headings){const h=document.createElement('h4');h.className='ghead';h.textContent=g.label+' · '+g.photos.length;$('#grid').append(h);}
@@ -395,7 +409,7 @@ async function openDet(id,n){if(n===undefined)n=photoPlan(visit,await visitPhoto
  for(const [id,key] of [['detNote','note'],['detSheet','sheet'],['detOwner','owner']]){$('#'+id).value=cur[key]||'';$('#'+id).disabled=isReadonly();}paintDetLocation();
  const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;}cur.original=JSON.stringify([cur.note,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId,!cur.omit]);
  $('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';$('#detDue').disabled=isReadonly();
- drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=isReadonly();$('#detDel').hidden=isReadonly();$('#det').classList.add('open');$('#captureNext').hidden=!captureComment||isReadonly();$('#captureSkip').hidden=!captureComment;$('#detClose').textContent=captureComment?'Skip':'Back';$('#detSave').textContent=captureComment?'Save & Next':'Save';setCard('#detDel',captureComment?'Retake':'Delete Photo','edit');$('#captureHint').textContent=captureComment?'Your photo is already saved. Comments are optional.':'';$('#photoDetails').open=!!(cur.tag||cur.sheet||cur.owner||cur.due);}
+ drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=isReadonly();$('#detDel').hidden=isReadonly();$('#det').classList.add('open');$('#captureNext').hidden=!captureComment||isReadonly();$('#captureSkip').hidden=!captureComment;$('#detClose').textContent=captureComment?'Skip':'Back';$('#detSave').textContent=captureComment?'Save & Next':'Save';setCard('#detDel',captureComment?'Retake photo':'Delete photo',captureComment?'camera':'trash',captureComment?'Discards this photo and returns to the camera':'Removes it from this visit');setCard('#captureNext','Save and take next photo','check');setCard('#captureSkip','Skip comment','arrow','The photo is already saved');$('#captureHint').textContent=captureComment?'Your photo is saved. A comment is optional and can be added later.':'';$('#photoDetails').open=!!(cur.tag||cur.sheet||cur.owner||cur.due);}
 function drawTags(active){$('#tagRow').replaceChildren();TAGS.forEach(t=>{const b=document.createElement('button');b.className='tag'+(t===active?' on':'')+(t==='Safety'?' safety':'');b.textContent=t;b.disabled=isReadonly();b.onclick=()=>{cur.tag=cur.tag===t?'':t;drawTags(cur.tag);};$('#tagRow').append(b);});$('#actionBits').style.display=(['Issue','Action','Safety'].includes(active))?'block':'none';}
 function drawDue(active){$('#dueRow').replaceChildren();['Next visit','One week','Two weeks','Clear'].forEach(d=>{const b=document.createElement('button');b.className='tag'+((d==='Clear'?!active:dueValue(d,visit.date)===active)?' on':'');b.textContent=d;b.disabled=isReadonly();b.onclick=()=>{cur.due=d==='Clear'?'':dueValue(d,visit.date);$('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';drawDue(cur.due);};$('#dueRow').append(b);});}
 $('#detDue').onchange=()=>{cur.due=$('#detDue').value;drawDue(cur.due);};
@@ -413,7 +427,7 @@ on('#detSave',async()=>{editable();const next=clone(visit),m={...((await oneM(cu
 on('#detDel',async()=>{if(!captureComment&&!confirm('Remove this photo from the working report? Issued copies stay in report history.'))return;await deletePhoto(cur.id);await refreshCount();$('#det').classList.remove('open');if(captureComment){captureComment=false;await returnCamera();}else await openGal();});
 /* Items are copied into each visit. Completed visits never read later statuses. */
 async function openItems(fromStart){await captureTask;itemsFromStart=fromStart;await paintItems();$('#itemsSheet').classList.add('open');}
-async function paintItems(){itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];$('#itemsTitle').textContent=svr(visit.num)+' items';$('#itemsList').replaceChildren();$('#addItem').hidden=isReadonly();$('#itemsContinue').textContent=itemsFromStart?'Continue to Photos':'Back to Visit';
+async function paintItems(){itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];$('#itemsTitle').textContent='Open Items · '+visitLabel(visit);$('#itemsList').replaceChildren();$('#addItem').hidden=isReadonly();$('#itemsContinue').textContent=itemsFromStart?'Continue to Photos':'Back to Visit';
  if(!visit.items.length){const p=document.createElement('p');p.textContent='No tracked items yet. Tag a photo Issue, Action or Safety, or add an item below.';$('#itemsList').append(p);}
  for(const item of [...visit.items].sort((a,b)=>Number(b.tag==='Safety')-Number(a.tag==='Safety'))){const card=document.createElement('article');card.className='itemcard'+(item.tag==='Safety'?' safety':'');const title=document.createElement('h3');title.textContent=(item.tag==='Safety'?'SAFETY · ':'')+item.ref+' · '+item.status;card.append(title);
  if(item.photoId){const pr=await oneP(item.photoId);if(pr?.blob){const im=document.createElement('img');im.alt='Original photo for item '+item.ref;im.src=URL.createObjectURL(pr.blob);itemUrls.push(im.src);card.append(im);}}
@@ -427,26 +441,86 @@ on('#addItem',()=>openItemEditor(null));on('#itemCancel',()=>$('#itemEditor').cl
 on('#itemSave',async()=>{editable();const note=$('#itemNote').value.trim();if(!note)throw new Error('Enter a short description for this item.');const next=clone(visit);let item=next.items.find(i=>i.id===editingItem);if(!item){item=newItem(next);next.items.push(item);}Object.assign(item,{note,owner:$('#itemOwner').value.trim(),due:$('#itemDue').value,area:$('#itemArea').value.trim(),update:$('#itemUpdate').value.trim()});await persistVisit(next);$('#itemEditor').classList.remove('open');await paintItems();});
 /* Exporting leaves the visit open. Completion is a separate, explicit action. */
 function busyFail(msg){$('#busyText').textContent=msg;$('#busyClose').style.display='block';}
+function busyShow(text){$('#busyText').textContent=text;$('#busyClose').style.display='none';$('#busyBar').style.width='0%';$('#busyWrap').classList.add('show');}
+function busyProgress(i,n){$('#busyText').textContent='Preparing photo '+i+' of '+n;$('#busyBar').style.width=Math.round(i/n*100)+'%';}
 on('#busyClose',()=>$('#busyWrap').classList.remove('show'));
 async function buildReport(){await captureTask;
  if(!visit.closed||visit.editing){const unreviewed=visit.items.filter(i=>i.status==='Not reviewed').length;if(unreviewed&&!confirm(unreviewed+' item(s) are not reviewed. Continue with that status shown?')){await openItems(false);return;}}
- stopCamera();$('#busyText').textContent='Preparing Word report';$('#busyClose').style.display='none';$('#busyWrap').classList.add('show');
- try{await prepareCurrentReport();$('#doneName').textContent=readyName;paintReportShare();$('#doneNote').textContent=isReadonly()?'Share the issued Word report, then save the complete visit package.':'Draft report. Mark Issued here before sharing and saving your final record.';$('#reviewIssue').hidden=isReadonly();setCard('#reviewIssue',visit.editing?'Finalize Edits':'Mark Issued','check','Preserve the final report before sharing');$('#done').classList.add('open');}
+ stopCamera();busyShow('Building the Word report');
+ try{await prepareCurrentReport(busyProgress);$('#doneName').textContent=readyName;paintReportShare();
+  $('#doneNote').textContent='';$('#doneEyebrow').textContent=isReadonly()?'Issued report ready':'Draft report ready';
+  $('#draftBox').hidden=isReadonly();$('#reviewIssue').hidden=isReadonly();setCard('#reviewIssue',visit.editing?'Finalize edits':'Mark issued','check',visit.editing?'Save the corrections or create a revision':'Lock in this version, then send');
+  $('#done').classList.add('open');}
  catch(e){showError(e);}finally{$('#busyWrap').classList.remove('show');}
 }
 on('#galBuild',async()=>{if(visit.walkFinishedAt)await openReview();else await finishWalk();});on('#galExport',buildReport);
 function download(blob,name){const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},30000);}
-on('#doneSave',()=>{if(readyBlob){download(readyBlob,readyName);$('#doneNote').textContent='Download requested. Confirm the file is saved before completing the visit.';}});
+on('#doneSave',()=>{if(readyBlob){download(readyBlob,readyName);$('#doneNote').textContent='Download started. The Word file is in your Downloads.';}});
 on('#doneClose',()=>$('#done').classList.remove('open'));on('#doneStart',backToStart);
 /* Portable backup. Restore validates first, then replaces all stores in one transaction. */
 function blobData(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});}
-async function exportBackup(){
- $('#backup').disabled=true;$('#backup').textContent='Preparing backup';
- try{const snapshot=await transaction(STORES,'readonly',tx=>{const qs=STORES.map(n=>tx.objectStore(n).getAll());return ()=>Object.fromEntries(STORES.map((n,i)=>[n,qs[i].result]));});
- for(const p of snapshot.photos){if(p.blob?.size){p.data=await blobData(p.blob);delete p.archived;}else if(p.archived===true){p.data=null;}else throw new Error('A saved photo is unreadable.');delete p.blob;}
- download(new Blob([JSON.stringify({format:'rdg-sitevisit-backup',version:2,createdAt:new Date().toISOString(),data:snapshot})],{type:'application/json'}),'RDG-Site-Visit-Backup-'+dateInput(Date.now())+'.json');
- alert('Backup download requested. Keep the saved JSON file somewhere you can find it. It contains all project records and photos still on this phone. Previously removed photos remain in your earlier cloud files.');
- }finally{$('#backup').disabled=false;$('#backup').textContent='Save all app data';}}
+/* Backup and Restore. A backup is one JSON file with every project, visit and photo on this
+   phone. It is prepared first, then handed to the share menu from a separate tap, so the user
+   picks where it goes (OneDrive, iCloud Drive, Google Drive, Files). Restore adds projects and
+   asks before replacing any project that is already here. */
+let backupReady=null;
+const plural=(n,word)=>n+' '+word+(n===1?'':'s');
+function fmtMB(bytes){return bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':Math.max(1,Math.round(bytes/1024))+' KB';}
+function ago(ts){const d=Math.floor((Date.now()-ts)/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago';}
+function lastBackup(){return stored('lastBackup',null);}
+async function makeBackupFile(onStep){
+ const snapshot=await transaction(STORES,'readonly',tx=>{const qs=STORES.map(n=>tx.objectStore(n).getAll());return ()=>Object.fromEntries(STORES.map((n,i)=>[n,qs[i].result]));});
+ let i=0;for(const p of snapshot.photos){if(p.blob?.size){p.data=await blobData(p.blob);delete p.archived;}else if(p.archived===true){p.data=null;}else throw new Error('A saved photo is unreadable.');delete p.blob;onStep?.(++i,snapshot.photos.length);}
+ const counts={projects:snapshot.projects.length,visits:snapshot.visits.length,photos:snapshot.photos.filter(p=>p.data).length};
+ const file=new File([JSON.stringify({format:'rdg-sitevisit-backup',version:2,createdAt:new Date().toISOString(),counts,data:snapshot})],'RDG-Site-Visit-Backup_'+dateInput(Date.now())+'.json',{type:'application/json'});
+ return {file,counts};
+}
+function paintBackupRow(){const last=lastBackup(),hasWork=allVisits.length>0,stale=!last||Date.now()-last.at>14*864e5;
+ setCard('#backupBtn','Backup and restore','backup',last?'Last backup '+ago(last.at):hasWork?'No backup yet. Tap to protect your visits.':'Keep your visits safe off this phone');
+ $('#backupBtn').classList.toggle('warn',hasWork&&stale);}
+async function openBackup(){
+ backupReady=null;$('#backupReady').hidden=true;$('#backupNote').textContent='';
+ const [ps,vs,count]=[projects.length,allVisits.length,await transaction(['photos'],'readonly',tx=>{const q=tx.objectStore('photos').count();return ()=>q.result;})];
+ const last=lastBackup();
+ $('#backupWhen').textContent=last?'Last backup '+ago(last.at)+', '+new Date(last.at).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}):'No backup yet';
+ $('#backupWhat').textContent='On this phone: '+plural(ps,'project')+', '+plural(vs,'visit')+', '+plural(count,'photo')+'.';
+ $('#backupStatus').classList.toggle('ok',!!last&&Date.now()-last.at<=14*864e5);
+ setCard('#backup','Create backup file','backup','One file with every project, visit and photo');$('#backup').disabled=false;$('#backup').classList.add('cta');
+ setCard('#restore','Restore from a backup file','restore','Choose the file from OneDrive, iCloud Drive, Google Drive or Files');
+ $('#backupSheet').classList.add('open');
+}
+async function prepareBackup(){
+ $('#backup').disabled=true;$('#backupReady').hidden=true;$('#backupNote').textContent='';
+ setCard('#backup','Preparing backup','backup','Reading projects and photos…');
+ try{backupReady=await makeBackupFile((i,n)=>{if(i%10===0||i===n)setCard('#backup','Preparing backup','backup','Photo '+i+' of '+n);});
+  $('#backupFile').textContent=backupReady.file.name+' · '+fmtMB(backupReady.file.size);
+  const shareable=canShareFile(backupReady.file);
+  setCard('#backupSave',shareable?'Save backup file':'Download backup file','share',shareable?'Choose Save to Files, then OneDrive':'Saves to Downloads. Then move it to Google Drive or OneDrive.');
+  $('#backupReady').hidden=false;$('#backup').classList.remove('cta');setCard('#backup','Backup ready','check',plural(backupReady.counts.projects,'project')+', '+plural(backupReady.counts.visits,'visit')+', '+plural(backupReady.counts.photos,'photo'));
+ }catch(e){setCard('#backup','Create backup file','backup','One file with every project, visit and photo');$('#backup').disabled=false;throw e;}
+}
+function canShareFile(file){try{return !!navigator.canShare?.({files:[file]});}catch{return false;}}
+function backupSaved(how){const b=backupReady;if(!b)return;remember('lastBackup',{at:Date.now(),...b.counts});$('#backupNote').textContent=how;paintBackupRow();
+ $('#backupWhen').textContent='Last backup today';$('#backupStatus').classList.add('ok');}
+/* Called straight from the tap so iOS keeps the share permission. */
+function saveBackupTap(){
+ const b=backupReady;if(!b)return;
+ if(!canShareFile(b.file)){download(b.file,b.file.name);backupSaved('Download started. Open your Downloads, then move '+b.file.name+' to OneDrive or Google Drive so it is safe off this phone.');return;}
+ $('#backupSave').disabled=true;
+ try{navigator.share({files:[b.file]}).then(()=>backupSaved('Backup handed to the app you chose. Check it arrived in your RDG Site Visit Backups folder.'))
+  .catch(e=>{$('#backupNote').textContent=e?.name==='AbortError'?'Canceled. Nothing was saved. Tap Save backup file when ready.':'Sharing did not work ('+(e?.message||'unknown')+'). Try again, or use a computer to restore later.';})
+  .finally(()=>{$('#backupSave').disabled=false;});}
+ catch(e){$('#backupSave').disabled=false;$('#backupNote').textContent='Could not open the share menu: '+e.message;}
+}
+/* A small bottom sheet with clear choices, used where a yes or no dialog would be ambiguous. */
+function askChoice(title,text,options){return new Promise(resolve=>{
+ $('#busyWrap').classList.remove('show');
+ $('#choiceTitle').textContent=title;$('#choiceText').textContent=text;$('#choiceButtons').replaceChildren();
+ const close=v=>{$('#choiceSheet').classList.remove('open');$('#choiceScrim').classList.remove('open');resolve(v);};
+ for(const o of options){const b=document.createElement('button');b.className='tile'+(o.primary?' cta':'');setCard(b,o.label,o.icon||(o.value==null?'close':'arrow'),o.sub||'');b.onclick=()=>close(o.value);$('#choiceButtons').append(b);}
+ $('#choiceScrim').onclick=()=>close(null);
+ $('#choiceSheet').classList.add('open');$('#choiceScrim').classList.add('open');
+});}
 function validateBackup(raw){
  if(raw?.format!=='rdg-sitevisit-backup'||![1,2].includes(raw.version)||!raw.data)throw new Error('This is not a supported Site Visit backup.');
  const d=raw.data,maps={};
@@ -471,23 +545,30 @@ function validateBackup(raw){
  return d;
 }
 let dataEpoch=0;
-on('#backup',exportBackup);on('#restore',()=>$('#restoreFile').click());
+on('#backupBtn',openBackup);on('#backupClose',()=>$('#backupSheet').classList.remove('open'));
+on('#backup',prepareBackup);$('#backupSave').onclick=saveBackupTap;
+on('#restore',()=>$('#restoreFile').click());
 $('#restoreFile').onchange=safe(async()=>{const file=$('#restoreFile').files[0];$('#restoreFile').value='';if(!file)return;
- const d=validateBackup(JSON.parse(await file.text()));
- if(!confirm('Restore '+d.projects.length+' projects, '+d.visits.length+' visits and '+d.photos.length+' photos? This replaces all data currently in this app. Cancel and back up first if you need to keep the current data.'))return;
- for(const p of d.photos){if(p.blob&&!await measure(p.blob))throw new Error('A photo in the backup cannot be opened. No saved data was changed.');}
- dataEpoch++;await transaction(STORES,'readwrite',tx=>{for(const n of STORES){const s=tx.objectStore(n);s.clear();d[n].forEach(r=>s.put(r));}});
- selectedProject=null;await loadState();alert('Backup restored.');});
+ $('#busyText').textContent='Opening backup file';$('#busyClose').style.display='none';$('#busyWrap').classList.add('show');
+ try{await restoreProjectFile(file);}finally{$('#busyWrap').classList.remove('show');}
+ if($('#backupSheet').classList.contains('open'))await openBackup();});
 let registration=null;
-on('#checkUpdate',async()=>{if(!registration){$('#updateNote').textContent='Updates are available when the app is hosted online.';return;}await registration.update();if(registration.waiting){if(confirm('Install the available update and reload? Saved projects and photos will remain.'))registration.waiting.postMessage('ACTIVATE');}else $('#updateNote').textContent='Update check requested. If a new version is found, it will appear here shortly.';});
+on('#checkUpdate',async()=>{if(!registration){$('#updateNote').textContent='Updates are available when the app is opened from its web address.';return;}await registration.update();if(registration.waiting){if(confirm('Install the update and reload? Your projects and photos stay on this phone.'))registration.waiting.postMessage('ACTIVATE');}else $('#updateNote').textContent='Checking for an update. If one is found it will show here in a moment.';});
 async function setupUpdates(){if(!('serviceWorker'in navigator))return;
  registration=await navigator.serviceWorker.register('sw.js',{updateViaCache:'none'});
- function ready(){if(registration.waiting)$('#updateNote').textContent='An update is ready. Tap Check for update to install.';}
+ function ready(){if(registration.waiting){$('#updateNote').textContent='An update is ready. Tap Check for app update to install it.';setCard('#checkUpdate','Install app update','refresh','A new version is ready');}}
  ready();registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',ready));
  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!visit)location.reload();else $('#updateNote').textContent='Update installed. Return to Start and reopen the app to load it.';});
 }
 wireCloudUI();
 wireWorkflow();
-async function init(){try{db=await openDB();await migrate();await loadState();if(!userProfile().name)openProfile(true);setupUpdates().catch(()=>{});}catch(e){$('#sState').textContent='Could not open saved projects. '+e.message;showError(e);}}
+function paintStatic(){
+ setCard('#profileBtn','Your information','user',userProfile().name?userProfile().name+' · on every report you prepare':'Name, phone and email for your reports');
+ setCard('#manageStorage','Phone storage','storage','Free space by removing old visit photos');
+ setCard('#checkUpdate','Check for app update','refresh','Build '+BUILD);
+}
+async function init(){try{db=await openDB();await migrate();paintStatic();await loadState();if(!userProfile().name)openProfile(true);setupUpdates().catch(()=>{});
+ // Ask the browser to keep this app's data even when the phone is short of space.
+ try{navigator.storage?.persist?.().catch(()=>{});}catch{}}catch(e){$('#sState').textContent='Could not open saved projects. '+e.message;showError(e);}}
 // One editor tab prevents competing visit numbers and conflicting photo or item edits.
 if(navigator.locks){navigator.locks.request('rdg-sitevisit-editor',{ifAvailable:true},async lock=>{if(!lock){$('#sState').textContent='Site Visit is already open in another tab or window. Close that window, then reload this one.';document.querySelectorAll('button').forEach(b=>b.disabled=true);return;}await init();await new Promise(()=>{});});}else init();

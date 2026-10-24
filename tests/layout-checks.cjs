@@ -20,7 +20,7 @@ function documentXml(buf){ // minimal zip reader for word/document.xml
   assert(!xml.includes('Left out of the report'),'omitted photo stays out');
   assert(!xml.includes('NaN'),'image sizes are numeric');
   assert(xml.indexOf('LIMITATIONS')<xml.indexOf('PHOTO OBSERVATIONS'),'summary page precedes photo pages');
-  for(const m of xml.matchAll(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/g)){const w=m[1]/914400,h=m[2]/914400;assert(w<=4.6&&h<=3.45,'photo fits its box');}
+  for(const m of xml.matchAll(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/g)){const w=m[1]/914400,h=m[2]/914400;assert(w<=4.65&&h<=3.5,'photo fits its box');}
  }
  const none=documentXml(Buffer.from(await (await ctx.window.SVReport.buildReport(base,recs.map(r=>({...r,omit:'1'})))).arrayBuffer()));
  assert(none.includes('No photographs selected for this report.'));

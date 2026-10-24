@@ -1,4 +1,4 @@
-const CACHE='rdg-sv-17-1';
+const CACHE='rdg-sv-18';
 const FILES=['index.html','workflow.css','workflow.js','app.js','cloud.js','archive.js','photo-order.js','report.js','docx.umd.js','logo.png','manifest.json','icon-192.png','icon-512.png','apple-touch-icon.png'];
 const BASE=new URL('./',self.location.href);
 self.addEventListener('install',event=>event.waitUntil((async()=>{

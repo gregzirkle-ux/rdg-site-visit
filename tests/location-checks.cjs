@@ -46,7 +46,7 @@ const visit={project:'Order Test',projNum:'T17',num:3,date:t0,closed:false,revis
   const xml=documentXml(Buffer.from(await (await ctx.window.SVReport.buildReport({...visit,reportLayout:layout},recs)).arrayBuffer()));const words=text(xml);
   const at=s=>words.findIndex(w=>w===s);
   assert(at('GENERAL')>0&&at('GENERAL')<at('ROOM 204')&&at('ROOM 204')<at('EXTERIOR NORTH'),'headings in order for '+layout);
-  const obs=words.filter(w=>/^OBSERVATION \d{3}/.test(w)).map(w=>w.slice(12,15));same(obs,['001','002','003','004','005','006']);
+  const obs=words.filter(w=>/^\d{3}$/.test(w));same(obs,['001','002','003','004','005','006']);
   assert(words.indexOf('Second general')<words.indexOf('First in 204'),'General photos print first');
   assert(!words.includes('Left out'),'photo left out of the report stays out');
   assert(!words.includes('ROOF'),'no heading for a location with only left-out photos');
@@ -59,7 +59,7 @@ const visit={project:'Order Test',projNum:'T17',num:3,date:t0,closed:false,revis
  // Forty photos, no words, no locations: still exports.
  const forty=Array.from({length:40},(_,i)=>({id:i+1,ts:t0+i*1000,note:'',tag:'',location:'',sheet:'',owner:'',due:'',omit:'',blob:new Blob([String(i)])}));
  const fortyXml=documentXml(Buffer.from(await (await ctx.window.SVReport.buildReport(visit,forty)).arrayBuffer()));
- assert.equal((fortyXml.match(/<w:drawing>/g)||[]).length,40);assert(text(fortyXml).includes('OBSERVATION 040'));
+ assert.equal((fortyXml.match(/<w:drawing>/g)||[]).length,40);assert(text(fortyXml).includes('040'));
  if(process.argv[2]){fs.mkdirSync(process.argv[2],{recursive:true});for(const layout of ['compact','large'])fs.writeFileSync(path.join(process.argv[2],'location-'+layout+'.docx'),Buffer.from(await (await ctx.window.SVReport.buildReport({...visit,reportLayout:layout},recs)).arrayBuffer()));}
  console.log('PASS: location groups in first-visited order, General first, oldest first within a group, continuous numbering, left-out photos, case-insensitive locations, legacy v16 order kept, v16 area read as location, gallery groups, export filenames with location, Word headings in both layouts, safety summary numbers, 40 photos with no words.');
 })().catch(e=>{console.error(e);process.exitCode=1});

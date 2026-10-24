@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 const app=fs.readFileSync(path.join(root,'app.js'),'utf8'),flow=fs.readFileSync(path.join(root,'workflow.js'),'utf8'),cloud=fs.readFileSync(path.join(root,'cloud.js'),'utf8'),html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);
 for(const m of (app+flow+cloud).matchAll(/(?:on|\$)\(['"]#([\w-]+)['"]\s*[,)]/g))assert(ids.includes(m[1]),'Missing control '+m[1]);
-function element(){const classes=new Set();return {children:[],value:'',hidden:false,disabled:false,style:{},classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),contains:x=>classes.has(x)},replaceChildren(){this.children=[]},append(...x){this.children.push(...x)},setAttribute(){},focus(){},click(){return this.onclick?.({preventDefault(){},stopPropagation(){}})}};}
+function element(){const classes=new Set();return {children:[],value:'',hidden:false,disabled:false,style:{},classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),contains:x=>classes.has(x),toggle:(x,on)=>on?classes.add(x):classes.delete(x)},replaceChildren(){this.children=[]},append(...x){this.children.push(...x)},setAttribute(){},focus(){},click(){return this.onclick?.({preventDefault(){},stopPropagation(){}})}};}
 const els=new Map();const $=key=>{if(!els.has(key))els.set(key,element());return els.get(key)};
 const now=Date.now(),mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 let dbdata,confirms=[],downloads=[],generated=0;

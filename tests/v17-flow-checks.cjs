@@ -84,7 +84,7 @@ const pickRow=async label=>{spinTo(label);await click('#locationUse');};
  // ZIP: Android downloads it; the photo index follows the report order and has a Location column.
  await click('#doneCloud');assert(el('#cloudFiles').children[0].children[2].children[0].children.some(c=>c.textContent==='Download ZIP'));
  // iPhone path still shares Word directly.
- nav.canShare=()=>true;nav.share=async()=>{};await click('#doneClose');await click('#reviewShare');assert.equal(el('#doneEmail').hidden,true);assert(el('#doneShare').children.some(c=>c.textContent==='Share Report'));
+ nav.canShare=()=>true;nav.share=async()=>{};await click('#doneClose');await click('#reviewShare');assert.equal(el('#doneEmail').hidden,true);assert(el('#doneShare').children.some(c=>c.textContent==='Email Report'));
  // Issue, then a new visit starts with no location and in location order.
  await click('#doneClose');await click('#reviewIssue');await click('#issueOriginal');assert.equal(v2().reportOrder,'location');await click('#doneStart');
  await click('#startBtn');const v3=data.visits.find(v=>v.num===3);assert.equal(v3.currentLocation,'');assert.equal(v3.reportOrder,'location');await click('#setupContinue');assert.equal(el('#locationBtn').textContent,'Set location');

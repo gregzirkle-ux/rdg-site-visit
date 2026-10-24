@@ -70,8 +70,9 @@ async function openCloud() {
   await captureTask; stopCamera();
   if (!visit) return;
   cloudSession = null; $('#cloudFiles').replaceChildren(); $('#cloudChecked').disabled = true;
+  setCard('#cloudChecked','I checked my saved files','check','Records that this package is safely stored'); setCard('#cloudDone','Back to the visit','arrow');
   $('#cloudConfirmed').textContent = ''; $('#cloudTitle').textContent = visit.project + ' · ' + svr(visit.num);
-  $('#cloudStatus').textContent = 'Preparing files on this phone…'; $('#cloudSheet').classList.add('open');
+  $('#cloudStatus').textContent = 'Preparing the package on this phone…'; $('#cloudSheet').classList.add('open');
   try {
     const snapshot = await dataSnapshot(visit.projectId);
     const v = snapshot.visits.find(v => v.id === visit.id);
@@ -94,17 +95,17 @@ async function openCloud() {
     const archive = await makeVisitZip(visitArchiveEntries(folder, report, imageFiles, index, recovery), visitStem(v)+(v.closed&&!v.editing?'':'_DRAFT')+'.zip');
     const card = document.createElement('article'); card.className = 'itemcard';
     const heading = document.createElement('h3'); heading.textContent = archive.name + ' · ' + (archive.size / 1048576).toFixed(1) + ' MB';
-    const contents = document.createElement('p'); contents.textContent = 'Includes Report, Photos (' + imageFiles.length + '), Photo-Index and Recovery folders.';
+    const contents = document.createElement('p'); contents.textContent = 'Inside: the Word report, ' + imageFiles.length + ' original photos, a photo index and a recovery file.';
     const shareable = (() => { try { return !!navigator.canShare?.({files:[archive]}); } catch { return false; } })();
-    const save = saveFileButton([archive], 'Save ZIP to Files', $('#cloudStatus')); save.className = 'tile';
-    setCard(save, shareable ? 'Share or Save ZIP' : 'Download ZIP', 'folder', shareable ? 'Files, OneDrive, Google Drive, Dropbox or email' : 'Saves to Downloads. Upload it from your cloud app.');
-    const fallback = document.createElement('button'); fallback.className = 'tile'; fallback.textContent = 'Download ZIP';
-    const alternatives=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Other save options';alternatives.append(summary,fallback);
+    const save = saveFileButton([archive], 'Save ZIP to Files', $('#cloudStatus'));
+    save.className = 'tile cta'; setCard(save, shareable ? 'Share or Save ZIP' : 'Download ZIP', 'folder', shareable ? 'Save to Files, then OneDrive and the project folder' : 'Saves to Downloads. Upload it from your cloud app.');
+    const fallback = document.createElement('button'); fallback.className = 'tile'; setCard(fallback, 'Download ZIP', 'folder', 'Saves to Downloads instead');
+    const alternatives=document.createElement('details'),summary=document.createElement('summary');alternatives.className='more';summary.textContent='Other options';const altTiles=document.createElement('div');altTiles.className='tiles';altTiles.append(fallback);alternatives.append(summary,altTiles);
     fallback.onclick = () => { download(archive, archive.name); $('#cloudStatus').textContent = 'Download requested. Move the ZIP to your project folder at your preferred destination and check the upload finishes.'; };
-    const choices=document.createElement('div');choices.className='tiles';choices.append(save,alternatives);card.append(heading, contents, choices); $('#cloudFiles').append(card);
+    const choices=document.createElement('div');choices.className='tiles';choices.append(save);card.className='readycard';card.append(heading, contents, choices, alternatives); $('#cloudFiles').append(card);
     cloudSession = {visitId:v.id, preparedAt:Date.now(), missing:0, closed:v.closed&&!v.editing};
     $('#cloudChecked').disabled = !v.closed||!!v.editing;
-    $('#cloudStatus').textContent = (v.closed&&!v.editing ? 'Ready. ' : 'Draft package. Mark the report issued and save again for final records. ') + 'Save this ZIP in your project folder. Extract it to open the SVR folder. Keep earlier recovery files if photos were previously removed from this project.';
+    $('#cloudStatus').textContent = (v.closed&&!v.editing ? 'Ready to save.' : 'Draft package. For the final record, mark the report issued and save the package again.');
 
   } catch(e) { $('#cloudStatus').textContent = 'Could not prepare files: '+e.message; }
 }
@@ -173,26 +174,85 @@ function remapProjectCopy(data, existing) {
     photos:data.photos.map(p=>({...p,id:pmap.get(p.id),visitId:vmap.get(p.visitId)})),
     meta:data.meta.map(m=>({...m,id:pmap.get(m.id),itemId:items.get(m.itemId)||''}))};
 }
+/* One restore for both kinds of file: a full backup (every project) or the project recovery
+   file inside a visit package. Projects not on this phone are added. For a project already
+   here the user picks which copy to keep. Nothing else on the phone is touched. */
+function splitProjects(data) {
+  return data.projects.map(p => {
+    const visits = data.visits.filter(v => v.projectId === p.id), vids = new Set(visits.map(v => v.id));
+    const photos = data.photos.filter(x => vids.has(x.visitId)), pids = new Set(photos.map(x => x.id));
+    return { projects: [p], visits, photos, meta: data.meta.filter(m => pids.has(m.id)) };
+  });
+}
+async function chooseRestore(title, text, options) {
+  if (typeof askChoice === 'function' && typeof document !== 'undefined' && document.getElementById?.('choiceSheet')) return askChoice(title, text, options);
+  // Fallback without the choice sheet: OK takes the first non-cancel option that changes data.
+  const act = options.find(o => o.value === 'go' || o.value === 'replace');
+  return confirm(title + '\n\n' + text) ? act.value : null;
+}
+async function applyProjectCopies(parts) {
+  let firstId = null;
+  await transaction(STORES, 'readwrite', tx => {
+    const qs = STORES.map(n => tx.objectStore(n).getAll()); let count = 0;
+    qs.forEach(q => { q.onsuccess = () => { if (++count !== STORES.length) return;
+      try {
+        const existing = Object.fromEntries(STORES.map((n, i) => [n, qs[i].result]));
+        for (const part of parts) {
+          const mapped = remapProjectCopy(part, existing);
+          if (mapped.oldProjectId) {
+            const ids = new Set(existing.visits.filter(v => v.projectId === mapped.oldProjectId).map(v => v.id));
+            const gone = new Set(existing.photos.filter(p => ids.has(p.visitId)).map(p => p.id));
+            gone.forEach(id => { tx.objectStore('photos').delete(id); tx.objectStore('meta').delete(id); });
+            ids.forEach(id => tx.objectStore('visits').delete(id));
+            existing.visits = existing.visits.filter(v => !ids.has(v.id));
+            existing.photos = existing.photos.filter(p => !gone.has(p.id)); existing.meta = existing.meta.filter(m => !gone.has(m.id));
+            existing.projects = existing.projects.filter(p => p.id !== mapped.oldProjectId);
+          }
+          for (const n of STORES) mapped[n].forEach(r => { tx.objectStore(n).put(r); existing[n].push(r); });
+          if (firstId == null) firstId = mapped.projects[0].id;
+        }
+      } catch (e) { tx.abort(); }
+    }; });
+  });
+  return firstId;
+}
 async function restoreProjectFile(file) {
-  const raw=JSON.parse(await file.text());
-  if(raw.format!=='rdg-sitevisit-project'||raw.version!==2||raw.data?.projects?.length!==1)throw new Error('Choose a project recovery file created by Save to Cloud. For an older full backup, use Restore backup under STORAGE.');
-  const data=validateBackup({...raw,format:'rdg-sitevisit-backup'});
-  for(const p of data.photos)if(p.blob&&!await measure(p.blob))throw new Error('A recovery photo cannot be opened. No data was changed.');
-  const source=data.projects[0],current=(await read('projects')).find(p=>p.key===source.key);
-  if(!confirm('Open recovery file for '+source.name+'?\n\n'+(current?'This replaces this project’s current visits, including newer work, with the saved snapshot. Save current work first.':'This adds the saved project to this device.')+' Other projects stay unchanged.'))return;
-  dataEpoch++;let restoredProjectId;
-  await transaction(STORES,'readwrite',tx=>{
-    const qs=STORES.map(n=>tx.objectStore(n).getAll());let count=0;
-    qs.forEach(q=>{q.onsuccess=()=>{if(++count!==STORES.length)return;
-      try { const existing=Object.fromEntries(STORES.map((n,i)=>[n,qs[i].result]));const mapped=remapProjectCopy(data,existing);
-      if(mapped.oldProjectId){const ids=new Set(existing.visits.filter(v=>v.projectId===mapped.oldProjectId).map(v=>v.id));
-        existing.photos.filter(p=>ids.has(p.visitId)).forEach(p=>{tx.objectStore('photos').delete(p.id);tx.objectStore('meta').delete(p.id);});
-        ids.forEach(id=>tx.objectStore('visits').delete(id));
-      }
-      for(const n of STORES)mapped[n].forEach(r=>tx.objectStore(n).put(r));restoredProjectId=mapped.projects[0].id;
-      } catch(e) { tx.abort(); }
-    };});
-  });selectedProject=restoredProjectId;await loadState();alert('Project recovery file opened. Other projects were kept.');
+  const notBackup = 'This file is not a Site Visit backup. Choose the backup file (RDG-Site-Visit-Backup, ending in .json), or the Recovery file inside a saved visit package.';
+  let raw; try { raw = JSON.parse(await file.text()); } catch { throw new Error(notBackup); }
+  const full = raw?.format === 'rdg-sitevisit-backup', single = raw?.format === 'rdg-sitevisit-project';
+  if (!full && !single) throw new Error(notBackup);
+  if (single && (raw.version !== 2 || raw.data?.projects?.length !== 1)) throw new Error('This recovery file is from an older version of the app and cannot be opened here.');
+  const data = validateBackup({...raw, format: 'rdg-sitevisit-backup'});
+  for (const p of data.photos) if (p.blob && !await measure(p.blob)) throw new Error('A photo in this file cannot be opened. Nothing on this phone was changed.');
+  const here = new Set((await read('projects')).map(p => p.key));
+  const parts = splitProjects(data), matching = parts.filter(x => here.has(x.projects[0].key)), fresh = parts.filter(x => !here.has(x.projects[0].key));
+  const n = (k, w) => k + ' ' + w + (k === 1 ? '' : 's');
+  const when = raw.createdAt ? ' from ' + new Date(raw.createdAt).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'}) : '';
+  const summary = (full ? 'Backup' : 'Recovery file') + when + ': ' + n(parts.length, 'project') + ', ' + n(data.visits.length, 'visit') + ', ' + n(data.photos.filter(p => p.blob).length, 'photo') + '.';
+  let apply;
+  if (!matching.length) {
+    const go = await chooseRestore('Restore this file?', summary + ' Everything in it is added to this phone. Nothing already here is removed.',
+      [{label: 'Restore', value: 'go', primary: true, icon: 'restore'}, {label: 'Cancel', value: null}]);
+    if (go !== 'go') return;
+    apply = fresh;
+  } else {
+    const names = matching.map(x => x.projects[0].name).join(', ');
+    const pick = await chooseRestore(matching.length === 1 ? 'This project is already here' : 'These projects are already here',
+      summary + ' Already on this phone: ' + names + '. Which copy do you want to keep?',
+      [{label: 'Keep the copy on this phone', value: 'keep', primary: true, icon: 'check', sub: fresh.length ? 'Adds only the other ' + n(fresh.length, 'project') : 'Nothing will change'},
+       {label: 'Use the copy in the file', value: 'replace', icon: 'restore', sub: 'Replaces this phone\'s copy, including any newer work on it'},
+       {label: 'Cancel', value: null}]);
+    if (!pick) return;
+    apply = pick === 'replace' ? parts : fresh;
+    if (!apply.length) { alert('Nothing changed. Every project in this file is already on this phone.'); return; }
+  }
+  if (typeof busyShow === 'function') busyShow('Restoring ' + n(apply.length, 'project'));
+  dataEpoch++;
+  const restoredId = await applyProjectCopies(apply);
+  // The file itself is a backup kept off the phone, so count it as the last backup here.
+  if (full && raw.createdAt && typeof stored === 'function' && !stored('lastBackup', null)) remember('lastBackup', {at: Date.parse(raw.createdAt) || Date.now()});
+  selectedProject = restoredId; await loadState();
+  alert('Restored ' + n(apply.length, 'project') + '. ' + (apply.length < parts.length ? 'Projects you kept on this phone were not changed.' : 'Other projects on this phone were not changed.'));
 }
 function wireCloudUI() {
   on('#galCloud',openCloud);on('#doneCloud',openCloud);
@@ -204,5 +264,4 @@ function wireCloudUI() {
     $('#cloudConfirmed').textContent='Confirmed by you on '+new Date(v.cloudCheckedAt).toLocaleString()+'. Nothing was removed from this phone.';
   });
   on('#reviewCleanup',openCleanup);on('#manageStorage',openCleanup);on('#cleanupClose',()=>$('#cleanupSheet').classList.remove('open'));
-  on('#restoreProject',()=>$('#projectFile').click());$('#projectFile').onchange=safe(async()=>{const file=$('#projectFile').files[0];$('#projectFile').value='';if(file)await restoreProjectFile(file);});
 }
