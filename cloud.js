@@ -46,6 +46,57 @@ async function projectRecoveryFile(data, stamp) {
   const name = fileStem(data.projects[0].number || data.projects[0].name) + '_Project-Recovery_' + stamp + '.json';
   return new File([JSON.stringify({format: 'rdg-sitevisit-project', version: 2, createdAt: new Date().toISOString(), data})], name, {type:'application/json'});
 }
+/* v19 data package: a ZIP with backup.json and the photos as separate files. A JSON file with every
+   photo written out as text grew too large for the phone's memory on big visits (the v18 crash),
+   so photos are never converted to text here. */
+async function dataPackage(format, data, name, onStep) {
+  const entries = [], photos = [];
+  for (const p of data.photos) {
+    const out = {...p}; delete out.blob;
+    if (p.blob?.size) { out.path = 'photos/' + p.id + photoExt(p); out.mime = p.blob.type || 'image/jpeg'; delete out.archived; entries.push({path: out.path, blob: p.blob}); }
+    else if (p.archived === true) out.data = null;
+    else throw new Error('A saved photo is unreadable. The file was not created.');
+    photos.push(out);
+  }
+  const counts = {projects: data.projects.length, visits: data.visits.length, photos: entries.length};
+  const json = new Blob([JSON.stringify({format, version: 3, createdAt: new Date().toISOString(), counts, data: {...data, photos}})], {type: 'application/json'});
+  const all = [{path: 'backup.json', blob: json}, ...(entries.length ? [{path: 'photos/', blob: new Blob()}] : []), ...entries];
+  return {file: await makeVisitZip(all, name, onStep), counts};
+}
+async function projectRecoveryZip(data, stamp) {
+  const name = fileStem(data.projects[0].number || data.projects[0].name) + '_Project-Recovery_' + stamp + '.zip';
+  return (await dataPackage('rdg-sitevisit-project', data, name)).file;
+}
+async function isZipFile(file) {
+  if (typeof file?.slice !== 'function' || file.size < 4) return false;
+  const b = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  return b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
+}
+/* Reads a backup ZIP, a recovery ZIP, or a whole visit package (its Recovery file is used). */
+async function readDataPackage(file, notBackup) {
+  const zip = await readZip(file);
+  const json = await zip.open('backup.json');
+  if (!json) {
+    const inner = [...zip.entries.keys()].find(n => /(^|\/)Recovery\/[^/]+\.(zip|json)$/i.test(n));
+    if (!inner) throw new Error(notBackup);
+    const blob = await zip.open(inner);
+    if (/\.zip$/i.test(inner)) return readDataPackage(blob, notBackup);
+    try { return JSON.parse(await blob.text()); } catch { throw new Error(notBackup); }
+  }
+  let raw; try { raw = JSON.parse(await json.text()); } catch { throw new Error(notBackup); }
+  if (raw?.version === 3) for (const p of raw.data?.photos || []) {
+    if (p.archived === true) continue;
+    if (typeof p.path !== 'string' || !zip.entries.has(p.path)) throw new Error('A photo is missing from this file. Nothing on this phone was changed.');
+    p.blob = await zip.open(p.path, p.mime || 'image/jpeg');
+  }
+  return raw;
+}
+/* Quick check that a photo from a ZIP starts like a JPEG, PNG or WebP, without decoding it. */
+async function looksLikeImage(blob) {
+  if (!blob?.size || typeof blob.slice !== 'function') return false;
+  const b = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  return (b[0] === 0xff && b[1] === 0xd8) || (b[0] === 0x89 && b[1] === 0x50) || (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45);
+}
 function saveFileButton(files, label, status) {
   const button = document.createElement('button'); button.className = 'ghost'; button.textContent = label;
   // Call share directly from the tap. Preparing files inside the handler can lose iOS user activation.
@@ -89,7 +140,7 @@ async function openCloud() {
     const lines = [['Filename','Observation','In report','Location','Photo time','Sheet / room','Tag','Note','Owner','Due','On this phone'], ...set.map(({rec:p,name,obs,location}) => [name,obs,p.omit?'No':'Yes',location||'General',new Date(p.ts).toISOString(),p.sheet,p.tag,p.note,p.owner,p.due,'Yes'])];
     const index = new File(['\uFEFF'+lines.map(row=>row.map(csvCell).join(',')).join('\r\n')], visitStem(v)+'_Photo-Index.csv', {type:'text/csv'});
     // This copy holds only the selected project, including history required by recurring items.
-    const recovery = await projectRecoveryFile(snapshot, stamp);
+    const recovery = await projectRecoveryZip(snapshot, stamp);
     const folder = 'SVR-' + String(v.num).padStart(3, '0') + (v.revision?'-R'+v.revision:'');
     $('#cloudStatus').textContent = 'Packing the complete visit ZIP…';
     const archive = await makeVisitZip(visitArchiveEntries(folder, report, imageFiles, index, recovery), visitStem(v)+(v.closed&&!v.editing?'':'_DRAFT')+'.zip');
@@ -146,13 +197,15 @@ async function openCleanup() {
 }
 async function removeLocalPhotos(visitId) {
   // Recompute dependencies inside the same transaction as removal.
-  return transaction(['visits','photos'],'readwrite',tx=>{
+  const result = await transaction(['visits','photos'],'readwrite',tx=>{
     const vs=tx.objectStore('visits').getAll(), ps=tx.objectStore('photos').getAll(); let loaded=0;
     const ready=()=>{if(++loaded!==2)return;const row=cleanupPlan(vs.result,ps.result).find(r=>r.visit.id===visitId);if(!row)return;
       for(const photo of row.removable){const next={...photo,archived:true,removedAt:Date.now()};delete next.blob;tx.objectStore('photos').put(next);}
       tx.objectStore('visits').put({...row.visit,localPhotosRemovedAt:Date.now()});
     };vs.onsuccess=ready;ps.onsuccess=ready;
   });
+  if (typeof dropThumbs === 'function') dropThumbs((await read('photos')).filter(p => p.visitId === visitId && !p.blob).map(p => p.id));
+  return result;
 }
 function remapProjectCopy(data, existing) {
   const source=data.projects[0], old=existing.projects.find(p=>p.key===source.key);
@@ -217,13 +270,16 @@ async function applyProjectCopies(parts) {
   return firstId;
 }
 async function restoreProjectFile(file) {
-  const notBackup = 'This file is not a Site Visit backup. Choose the backup file (RDG-Site-Visit-Backup, ending in .json), or the Recovery file inside a saved visit package.';
-  let raw; try { raw = JSON.parse(await file.text()); } catch { throw new Error(notBackup); }
+  const notBackup = 'This file is not a Site Visit backup. Choose the backup file (RDG-Site-Visit-Backup, ending in .zip or .json), a visit package ZIP, or the Recovery file inside one.';
+  let raw;
+  if (await isZipFile(file)) { try { raw = await readDataPackage(file, notBackup); } catch (e) { throw new Error(/ZIP|missing|recompressed|incomplete/.test(e.message) ? e.message : notBackup); } }
+  else { try { raw = JSON.parse(await file.text()); } catch { throw new Error(notBackup); } }
   const full = raw?.format === 'rdg-sitevisit-backup', single = raw?.format === 'rdg-sitevisit-project';
   if (!full && !single) throw new Error(notBackup);
-  if (single && (raw.version !== 2 || raw.data?.projects?.length !== 1)) throw new Error('This recovery file is from an older version of the app and cannot be opened here.');
+  if (single && (![2, 3].includes(raw.version) || raw.data?.projects?.length !== 1)) throw new Error('This recovery file is from an older version of the app and cannot be opened here.');
   const data = validateBackup({...raw, format: 'rdg-sitevisit-backup'});
-  for (const p of data.photos) if (p.blob && !await measure(p.blob)) throw new Error('A photo in this file cannot be opened. Nothing on this phone was changed.');
+  // Text backups are decoded to check every photo; ZIP photos were never converted, so a header check is enough.
+  for (const p of data.photos) if (p.blob && !(raw.version === 3 ? await looksLikeImage(p.blob) : await measure(p.blob))) throw new Error('A photo in this file cannot be opened. Nothing on this phone was changed.');
   const here = new Set((await read('projects')).map(p => p.key));
   const parts = splitProjects(data), matching = parts.filter(x => here.has(x.projects[0].key)), fresh = parts.filter(x => !here.has(x.projects[0].key));
   const n = (k, w) => k + ' ' + w + (k === 1 ? '' : 's');
@@ -264,4 +320,101 @@ function wireCloudUI() {
     $('#cloudConfirmed').textContent='Confirmed by you on '+new Date(v.cloudCheckedAt).toLocaleString()+'. Nothing was removed from this phone.';
   });
   on('#reviewCleanup',openCleanup);on('#manageStorage',openCleanup);on('#cleanupClose',()=>$('#cleanupSheet').classList.remove('open'));
+}
+
+/* ---------- v19: delete a past report ----------
+   Reports are deleted only when no other report depends on them. A later report that carries
+   items first noted in this one keeps those items' history (and evidence photos) through it. */
+function visitDependents(visits, id) {
+  const target = visits.find(v => v.id === id);
+  if (!target) return [];
+  const refers = v => [...(v.items || []), ...(v.legacyReportItems || []), ...(v.history || []).flatMap(h => h.visit?.items || [])].some(i => i.originVisitId === id);
+  return visits.filter(v => v.id !== id && v.projectId === target.projectId && refers(v));
+}
+async function deleteVisit(id) {
+  let removed = null, blockedBy = null;
+  await transaction(['visits', 'photos', 'meta'], 'readwrite', tx => {
+    const vq = tx.objectStore('visits').getAll(), pq = tx.objectStore('photos').index('visitId').getAll(id);let loaded = 0;
+    const ready = () => { if (++loaded !== 2) return;
+      const deps = visitDependents(vq.result, id);
+      if (deps.length) { blockedBy = deps; return; }
+      for (const p of pq.result) { tx.objectStore('photos').delete(p.id); tx.objectStore('meta').delete(p.id); }
+      tx.objectStore('visits').delete(id); removed = pq.result.map(p => p.id);
+    };
+    vq.onsuccess = ready; pq.onsuccess = ready;
+  });
+  if (blockedBy) throw new Error('This report cannot be deleted because ' + blockedBy.map(visitLabel).join(', ') + ' carries items first noted in it. Delete the later report first, or keep both.');
+  if (removed && typeof dropThumbs === 'function') dropThumbs(removed);
+  return removed;
+}
+
+/* ---------- v19: share a project setup or its room names ----------
+   The share is a link with the setup in the part after #, so it works by text or email with no
+   server. Nothing else (visits, photos, reports, contact details of the sender) is included. */
+const SHARE_FORMAT = 'rdg-sv-share';
+function b64urlEncode(text) { const bytes = new TextEncoder().encode(text); let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64urlDecode(code) { let s = code.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return new TextDecoder().decode(Uint8Array.from(atob(s), c => c.charCodeAt(0))); }
+const shareStr = v => typeof v === 'string' ? v.trim().slice(0, 300) : '';
+function sharePayload(project, kind) {
+  const p = {name: project.name, number: project.number || ''};
+  if (kind === 'project') for (const k of ['address', 'client', 'contact', 'phone', 'email']) if (project[k]) p[k] = project[k];
+  return {f: SHARE_FORMAT, v: 1, kind, project: p, rooms: [...(project.locations || [])]};
+}
+function shareBase() { const href = (typeof location !== 'undefined' && location.href) || ''; return href.split('#')[0].split('?')[0]; }
+function shareLink(payload) { return shareBase() + '#share=' + b64urlEncode(JSON.stringify(payload)); }
+function shareMessage(payload) {
+  const n = payload.rooms.length, rooms = n + (n === 1 ? ' room' : ' rooms');
+  const what = payload.kind === 'project' ? 'Project setup for ' + payload.project.name + ' (' + rooms + ')' : 'Room names for ' + payload.project.name + ' (' + rooms + ')';
+  return 'RDG Site Visit: ' + what + '.\n\nTap to add it:\n' + shareLink(payload) + '\n\nUsing Site Visit from your home screen? Copy this message, open the app, and tap Add shared project.';
+}
+/* Accepts the whole message, the link, or just the code. Returns a cleaned payload or throws. */
+function parseShare(text) {
+  const m = String(text || '').match(/share=([A-Za-z0-9_-]+)/) || String(text || '').trim().match(/^([A-Za-z0-9_-]{16,})$/);
+  if (!m) throw new Error('No shared project found. Paste the whole message or link your coworker sent.');
+  let raw; try { raw = JSON.parse(b64urlDecode(m[1])); } catch { throw new Error('This share link is incomplete. Ask your coworker to send it again, or copy the whole link.'); }
+  if (raw?.f !== SHARE_FORMAT || raw.v !== 1 || !['project', 'rooms'].includes(raw.kind) || !raw.project || !shareStr(raw.project.name)) throw new Error('This is not a Site Visit share link.');
+  const project = {name: shareStr(raw.project.name), number: shareStr(raw.project.number)};
+  if (raw.kind === 'project') for (const k of ['address', 'client', 'contact', 'phone', 'email']) project[k] = shareStr(raw.project[k]);
+  const rooms = [];
+  for (const r of Array.isArray(raw.rooms) ? raw.rooms : []) { const name = shareStr(r).slice(0, 120); if (name && !rooms.some(x => locationKey(x) === locationKey(name))) rooms.push(name); }
+  return {kind: raw.kind, project, rooms: rooms.slice(0, 2000)};
+}
+function projectKeyFor(p) { return p.number ? 'number:' + p.number.toLowerCase() : 'name:' + p.name.toLowerCase(); }
+/* Rooms are added to a project's saved list; names already there are kept as they are. */
+function mergeRooms(list, rooms) {
+  const out = [...(list || [])];let added = 0;
+  for (const r of rooms) if (!out.some(x => locationKey(x) === locationKey(r))) { out.push(r); added++; }
+  return {list: out, added, already: rooms.length - added};
+}
+/* Asks where the share goes, then saves it. Returns a summary, or null when canceled. */
+async function importShared(share) {
+  const all = await read('projects'), key = projectKeyFor(share.project), match = all.find(p => p.key === key);
+  const n = share.rooms.length, rooms = n + (n === 1 ? ' room' : ' rooms'), label = p => p.name + (p.number ? ' · ' + p.number : '');
+  let target = null, create = false;
+  if (share.kind === 'project') {
+    const pick = await askChoice(match ? 'You already have this project' : 'Add this project?',
+      match ? label(match) + ' is already on this phone. Add the shared ' + rooms + ' to it? Its details stay as they are; empty fields are filled in.' : label(share.project) + (share.project.address ? ', ' + share.project.address : '') + ', with ' + rooms + '.',
+      [{label: match ? 'Add the rooms to ' + match.name : 'Add project', value: 'go', primary: true, icon: 'plus'}, {label: 'Cancel', value: null}]);
+    if (pick !== 'go') return null;
+    if (match) target = match; else create = true;
+  } else {
+    if (!n) throw new Error('This share has no room names in it.');
+    const sorted = [...all].sort((a, b) => Number(b.key === key) - Number(a.key === key) || Number(b.id === selectedProject) - Number(a.id === selectedProject) || a.name.localeCompare(b.name));
+    const options = sorted.map(p => ({label: 'Add to ' + p.name, value: 'p' + p.id, icon: 'plus', primary: p.key === key || (!match && p.id === selectedProject), sub: (p.number ? 'No. ' + p.number + ' · ' : '') + (p.locations || []).length + ' rooms now'}));
+    if (!match) options.push({label: 'New project: ' + share.project.name, value: 'new', icon: 'plus', sub: 'Creates the project with these rooms'});
+    options.push({label: 'Cancel', value: null});
+    const pick = await askChoice('Add ' + rooms + '?', 'Room names shared from ' + label(share.project) + '. Which project should they go in?', options);
+    if (!pick) return null;
+    if (pick === 'new') create = true; else target = all.find(p => 'p' + p.id === pick);
+  }
+  if (create) {
+    const record = {name: share.project.name, number: share.project.number, key, locations: [...share.rooms]};
+    for (const k of ['address', 'client', 'contact', 'phone', 'email']) record[k] = share.project[k] || '';
+    const id = await put('projects', record);
+    return {projectId: id, text: 'Added ' + share.project.name + ' with ' + rooms + '.'};
+  }
+  const merged = mergeRooms(target.locations, share.rooms), next = {...target, locations: merged.list};
+  if (share.kind === 'project') for (const k of ['address', 'client', 'contact', 'phone', 'email']) if (!next[k] && share.project[k]) next[k] = share.project[k];
+  await put('projects', next);
+  return {projectId: target.id, text: 'Added ' + merged.added + (merged.added === 1 ? ' room' : ' rooms') + ' to ' + target.name + '.' + (merged.already ? ' ' + merged.already + ' were already there.' : '')};
 }

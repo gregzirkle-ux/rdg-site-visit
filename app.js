@@ -1,5 +1,5 @@
 'use strict';
-const BUILD='v18';
+const BUILD='v19';
 const $=s=>document.querySelector(s);
 const TAGS=['Observation','Issue','Action','Safety'];
 const NOTE_KEYS=['note','tag','location','sheet','owner','due','itemId','omit'];
@@ -19,10 +19,12 @@ function clone(x){return structuredClone(x);}
 function stored(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
 function remember(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
 function openDB(){return new Promise((resolve,reject)=>{
- const req=indexedDB.open('rdg-sitevisit',4);
+ const req=indexedDB.open('rdg-sitevisit',5);
  req.onupgradeneeded=()=>{
   const d=req.result,tx=req.transaction;
   for(const name of STORES){if(!d.objectStoreNames.contains(name))d.createObjectStore(name,{keyPath:'id',autoIncrement:name!=='meta'});}
+  // v19: small gallery thumbnails, keyed by photo id. Not part of backups; rebuilt when missing.
+  if(!d.objectStoreNames.contains('thumbs'))d.createObjectStore('thumbs',{keyPath:'id'});
   const photos=tx.objectStore('photos');
   if(!photos.indexNames.contains('visitId'))photos.createIndex('visitId','visitId');
   const visits=tx.objectStore('visits');
@@ -68,7 +70,7 @@ async function persistVisit(next){await putV(next);if(visit&&visit.id===next.id)
 async function deletePhoto(id){editable();const next=clone(visit);
  if(next.items.some(i=>i.photoId===id))throw new Error('This photo is the original evidence for a tracked item. Keep it with the item history.');
  next.items.forEach(i=>i.followupPhotoIds=(i.followupPhotoIds||[]).filter(p=>p!==id));
- await transaction(['photos','meta','visits'],'readwrite',tx=>{const preserved=(next.history||[]).some(h=>h.photos.some(p=>p.id===id));if(preserved){const q=tx.objectStore('meta').get(id);q.onsuccess=()=>tx.objectStore('meta').put({...(q.result||{}),id,excluded:'1'});}else{tx.objectStore('photos').delete(id);tx.objectStore('meta').delete(id);}tx.objectStore('visits').put(next);});visit=next;readyBlob=null;
+ await transaction(['photos','meta','visits'],'readwrite',tx=>{const preserved=(next.history||[]).some(h=>h.photos.some(p=>p.id===id));if(preserved){const q=tx.objectStore('meta').get(id);q.onsuccess=()=>tx.objectStore('meta').put({...(q.result||{}),id,excluded:'1'});}else{tx.objectStore('photos').delete(id);tx.objectStore('meta').delete(id);}tx.objectStore('visits').put(next);});visit=next;readyBlob=null;dropThumbs([id]);
 }
 function dueValue(value,ts){if(value==='One week'||value==='Two weeks'){const d=new Date(ts);d.setDate(d.getDate()+(value==='One week'?7:14));return dateInput(d);}return value||'';}
 function newItem(v,data={}){v.itemSeq=(v.itemSeq||0)+1;return {id:'item:'+v.id+':'+v.itemSeq,ref:String(v.num).padStart(3,'0')+'.'+String(v.itemSeq).padStart(2,'0'),originVisitId:v.id,firstVisitNum:v.num,firstNoted:v.date,note:'',owner:'',due:'',area:'',status:'New',update:'',photoId:null,followupPhotoIds:[],...data};}
@@ -131,11 +133,11 @@ async function paintStart(){
  $('#sNum').textContent=pending?visitLabel(pending)+' open':proj?'Next '+visitLabel({num:nextNum}):'Welcome';
  const past=pv.slice().sort((a,b)=>b.num-a.num);
  setCard('#existingBtn','Past reports','history',past.length?past.length+(past.length===1?' report':' reports')+' for this project':'None yet for this project');$('#existingBtn').disabled=!proj;
- $('#existingEmpty').hidden=!!past.length;$('#pastWrap').style.display=past.length?'block':'none';$('#pastList').replaceChildren();
- for(const v of past){const b=document.createElement('button');b.className='tile';const open=(v.items||[]).filter(i=>i.status!=='Closed').length;
+ $('#existingEmpty').hidden=!!past.length;$('#pastWrap').style.display=past.length?'block':'none';$('#pastList').replaceChildren();$('#pastHint').hidden=!past.length;
+ for(const v of past){const b=document.createElement('button');b.className='tile';b.type='button';const open=(v.items||[]).filter(i=>i.status!=='Closed').length;
   const status=v.editing?'Working edits':!v.closed?'Draft':v.issuedAt?'Issued':'Complete';
   setCard(b,visitLabel(v)+' · '+new Date(v.date).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}),v.closed&&!v.editing?'check':'edit',status+' · '+(open?open+' open item'+(open===1?'':'s'):'No open items')+(v.localPhotosRemovedAt?' · Photos archived':''));
-  b.onclick=safe(()=>openPast(v));$('#pastList').append(b);}
+  $('#pastList').append(swipeRow(b,safe(()=>openPast(v)),safe(()=>askDeleteVisit(v))));}
  paintBackupRow();
 }
 function sameDay(ts){return new Date(ts).toDateString()===new Date().toDateString();}
@@ -261,7 +263,7 @@ function shoot(){
       const blob = await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",PHOTO_QUALITY));
       if(!blob || !blob.size) throw new Error("The camera did not return a photo. Please take it again.");
       lastId = await savePhoto(vid, ts, blob, shotLocation);
-      if(visit && visit.id===vid){ await refreshCount(); $('#cameraSaved').textContent='Photo saved on this device'; await openCaptured(lastId); }
+      if(visit && visit.id===vid){ await refreshCount(); checkSizeWarning(vid); $('#cameraSaved').textContent='Photo saved on this device'; await openCaptured(lastId); }
     } catch(e){ showError(e); }
     finally { busy=false; $("#shutter").classList.remove("busy"); }
   })();
@@ -304,8 +306,11 @@ function paintCount(){
 
 /* ---------- location ----------
    The current location is kept on the visit and stamped on each new photo. Saved locations
-   belong to the project and are shown on a wheel, sorted by number then name.
-   Changing one photo never changes either. */
+   belong to the project and are shown on a wheel, sorted by number (default), A to Z, or most
+   recent, and filtered by the search box. Changing one photo never changes either. Renaming
+   a saved location also renames it on this visit's photos and items. */
+let locationRenaming=null;
+function locationSort(){const m=stored('locationSort','number');return ['number','alpha','recent'].includes(m)?m:'number';}
 function projectFor(v){return projects.find(p=>p.id===v?.projectId);}
 function savedLocations(){return projectFor(visit)?.locations||[];}
 async function saveLocations(list){const p=projectFor(visit);if(!p)return;const next={...p,locations:list};await put('projects',next);projects=projects.map(x=>x.id===next.id?next:x);}
@@ -314,36 +319,58 @@ async function setCurrentLocation(name){const next=clone(visit);next.currentLoca
 async function setPhotoLocation(id,name){editable();const m=(await oneM(id))||{id};const next=clone(visit),item=next.items.find(i=>i.photoId===id);if(item)item.area=name;
  await transaction(['meta','visits'],'readwrite',tx=>{tx.objectStore('meta').put({...m,id,location:name});if(item)tx.objectStore('visits').put(next);});if(item)visit=next;readyBlob=null;}
 function paintLocation(){$("#locationBtn").textContent=(visit?.currentLocation)||"Set location";}
+function locationHelpText(){return locationRenaming?'Type the new name for '+locationRenaming+' and tap Save. Photos in this visit move to the new name.':locationTarget?.photoId==null?"New photos are tagged with this location until you change it.":"Changes this photo only. New photos keep the current location.";}
+function paintLocationMode(){
+  $("#locationHelp").textContent=locationHelpText();
+  $("#locationAdd").textContent=locationRenaming?'Save':'Add';
+  $("#locationInput").placeholder=locationRenaming?'New name for '+locationRenaming:'Search or add, e.g. Room 204';
+  for(const [id,mode] of [['#locSortNumber','number'],['#locSortAlpha','alpha'],['#locSortRecent','recent']]){$(id).classList.toggle('on',locationSort()===mode);$(id).setAttribute('aria-pressed',String(locationSort()===mode));}
+}
 function openLocation(target=null,current=visit?.currentLocation||''){
-  locationTarget={photoId:target,current};
+  locationTarget={photoId:target,current};locationRenaming=null;
   $("#locationTitle").textContent=target==null?"Location":"Location for this photo";
-  $("#locationHelp").textContent=target==null?"New photos are tagged with this location until you change it.":"Changes this photo only. New photos keep the current location.";
-  $("#locationInput").value="";drawLocations();
+  $("#locationInput").value="";paintLocationMode();drawLocations();
   $("#locationSheet").classList.add("open");$("#scrim").classList.add("open");
   if(!savedLocations().length)setTimeout(()=>$("#locationInput").focus(),260);
 }
 function closeLocation(){
-  locationTarget=null;$("#locationInput").blur();
+  locationTarget=null;locationRenaming=null;$("#locationInput").blur();
   $("#locationSheet").classList.remove("open");$("#scrim").classList.remove("open");
   if(!document.querySelector('.sheet.open'))$("#cam").play().catch(()=>{});
 }
 /* The wheel is a scroll-snapped column with two blank rows above and below, so row i sits in
    the centre band when scrollTop is i rows. Spinning only moves the wheel; Use sets the location. */
 const WHEEL_ROW=44;
-function wheelNames(){return ['',...sortLocations(savedLocations())];}
+function locationFilter(){return locationRenaming?'':$("#locationInput").value.trim();}
+function wheelNames(){const q=locationFilter(),list=filterLocations(sortLocations(savedLocations(),locationSort()),q);return q?list:['',...list];}
 function wheelIndex(){const w=$("#locationWheel");return Math.max(0,Math.min(w.children.length-1,Math.round(w.scrollTop/WHEEL_ROW)));}
 function paintWheel(){
   const w=$("#locationWheel"),at=w.scrollTop/WHEEL_ROW,i=wheelIndex();
   [...w.children].forEach((b,k)=>{const d=Math.max(-3,Math.min(3,k-at));b.style.transform='rotateX('+(-d*20)+'deg)';b.style.opacity=String(Math.max(.25,1-Math.abs(d)*.3));
     b.classList.toggle('on',k===i);b.setAttribute('aria-selected',String(k===i));});
-  $("#locationRemove").disabled=!wheelNames()[i];
+  const name=wheelNames()[i];$("#locationRemove").disabled=!name;$("#locationRename").disabled=!name;$("#locationUse").disabled=!w.children.length;
 }
 function wheelTo(i,smooth){const w=$("#locationWheel");i=Math.max(0,Math.min(w.children.length-1,i));
   if(smooth&&w.scrollTo)w.scrollTo({top:i*WHEEL_ROW,behavior:'smooth'});else w.scrollTop=i*WHEEL_ROW;paintWheel();}
 function drawLocations(focus=locationTarget?.current){
-  const w=$("#locationWheel"),names=wheelNames();w.replaceChildren();
+  const w=$("#locationWheel"),names=wheelNames(),q=locationFilter();w.replaceChildren();
   names.forEach((name,i)=>{const b=document.createElement("button");b.type="button";b.className="wheelitem";b.textContent=name||"General (no location)";b.setAttribute("role","option");b.onclick=()=>wheelTo(i,true);w.append(b);});
+  $("#locationEmpty").hidden=!q||names.length>0;if(w.parentNode)w.parentNode.hidden=!!q&&!names.length;$("#locationEmpty").textContent='No saved location matches "'+q+'". Tap Add to save it.';
   wheelTo(Math.max(0,names.findIndex(n=>locationKey(n)===locationKey(focus))),false);
+}
+/* One transaction: the project's list, this visit's photos and items, and the current location. */
+async function renameLocation(from,to){
+  to=String(to||'').trim();if(!to||to===from)return;const p=projectFor(visit);if(!p)return;
+  const project={...p,locations:renameInList(p.locations||[],from,to)},key=locationKey(from);
+  const next=isReadonly()?null:clone(visit);
+  if(next){if(locationKey(next.currentLocation)===key)next.currentLocation=to;for(const i of next.items)if(locationKey(i.area)===key)i.area=to;}
+  const moved=next?(await visitPhotos()).filter(r=>locationKey(photoLocation(r))===key):[];
+  await transaction(['projects','visits','meta'],'readwrite',tx=>{tx.objectStore('projects').put(project);
+   if(next){tx.objectStore('visits').put(next);for(const r of moved){const q=tx.objectStore('meta').get(r.id);q.onsuccess=()=>tx.objectStore('meta').put({...(q.result||{id:r.id}),id:r.id,location:to});}}});
+  projects=projects.map(x=>x.id===project.id?project:x);if(next){visit=next;readyBlob=null;paintLocation();}
+  if(locationTarget&&locationKey(locationTarget.current)===key)locationTarget.current=to;
+  if(cur&&locationKey(cur.location)===key){cur.location=to;if($('#det').classList.contains('open'))paintDetLocation();}
+  return moved.length;
 }
 async function pickLocation(name){
   const target=locationTarget;if(!target)return;name=String(name||"").trim();
@@ -353,15 +380,27 @@ async function pickLocation(name){
   if(target.photoId!=null){if($('#det').classList.contains('open')&&cur?.id===target.photoId){cur.location=name;paintDetLocation();}if($('#gal').classList.contains('open'))await openGal();}
 }
 on("#locationBtn",e=>{e.stopPropagation();if(visit&&!isReadonly())openLocation();});
-on("#locationAdd",()=>pickLocation($("#locationInput").value));
+on("#locationAdd",async()=>{
+  if(!locationRenaming)return pickLocation($("#locationInput").value);
+  const from=locationRenaming,to=$("#locationInput").value.trim();if(!to)throw new Error('Type the new name first.');
+  const moved=await renameLocation(from,to);locationRenaming=null;$("#locationInput").value="";paintLocationMode();drawLocations(to);
+  $("#locationHelp").textContent='Renamed to '+to+'.'+(moved?' '+moved+(moved===1?' photo':' photos')+' in this visit moved with it.':'');
+  if($('#gal').classList.contains('open'))await openGal();});
+on("#locationRename",()=>{const name=wheelNames()[wheelIndex()];if(!name)return;locationRenaming=name;$("#locationInput").value=name;paintLocationMode();$("#locationInput").focus();});
+for(const [id,mode] of [['#locSortNumber','number'],['#locSortAlpha','alpha'],['#locSortRecent','recent']])on(id,()=>{const name=wheelNames()[wheelIndex()];remember('locationSort',mode);paintLocationMode();drawLocations(name);});
 on("#locationUse",()=>pickLocation(wheelNames()[wheelIndex()]));
-on("#locationRemove",async()=>{const i=wheelIndex(),name=wheelNames()[i];if(!name||!confirm('Remove '+name+' from the saved list? Photos keep their location.'))return;
+on("#locationRemove",async()=>{const i=wheelIndex(),name=wheelNames()[i];if(!name||!confirm('Delete '+name+' from the saved list? Photos already tagged '+name+' keep that location.'))return;
   await saveLocations(savedLocations().filter(x=>locationKey(x)!==locationKey(name)));drawLocations();wheelTo(i-1,false);});
 $("#locationWheel").addEventListener("scroll",()=>requestAnimationFrame(paintWheel),{passive:true});
 $("#locationWheel").addEventListener("keydown",e=>{if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();wheelTo(wheelIndex()+(e.key==="ArrowDown"?1:-1),true);}});
-on("#locationDone",()=>$("#locationInput").value.trim()?pickLocation($("#locationInput").value):closeLocation());
+on("#locationDone",()=>{if(locationRenaming){locationRenaming=null;$("#locationInput").value="";paintLocationMode();drawLocations();return;}
+  const typed=$("#locationInput").value.trim(),match=savedLocations().find(x=>locationKey(x)===locationKey(typed));
+  // Done (or Enter) with a search typed uses the highlighted match; a name with no match is added.
+  return typed?pickLocation(match||(wheelNames().length?wheelNames()[wheelIndex()]:typed)):closeLocation();});
 $("#scrim").onclick=()=>closeLocation();
-$("#locationInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("#locationAdd").click();}});
+$("#locationInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$(locationRenaming?"#locationAdd":"#locationDone").click();}});
+// Typing a search highlights the first match; clearing it returns to the current location.
+$("#locationInput").addEventListener("input",()=>{if(!locationRenaming)drawLocations($("#locationInput").value.trim()?null:locationTarget?.current);});
 
 /* Visit details and photo review */
 on('#projBtn',e=>{e.stopPropagation();openVisitInfo();});
@@ -373,8 +412,53 @@ async function openVisitInfo(){if(!visit)return;await fillVisitContact();visitIn
 on('#visClose',()=>$('#vis').classList.remove('open'));
 on('#visSave',async()=>{editable();if(!$('#vDate').value)throw new Error('Enter the visit date.');const next=clone(visit);if($('#vDate').value!==dateInput(next.date))next.date=new Date($('#vDate').value+'T12:00:00').getTime();for(const [id,key] of [['vAtt','attendees'],['vBy','preparedBy'],['vWx','weather'],['vTemp','temp'],['vCompany','preparedCompany'],['vPhone','preparedPhone'],['vOfficePhone','preparedOfficePhone'],['vEmail','preparedEmail'],['vDistribution','distribution']])next[key]=$('#'+id).value.trim();await persistVisit(next);remember('preparedBy',visit.preparedBy);$('#vis').classList.remove('open');if(visitInfoFromSetup)showSetup();else await refreshReviewIfOpen();});
 on('#vPause',backToStart);
-function releaseUrls(){urls.forEach(URL.revokeObjectURL);urls=[];itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null;}if(thumbUrl){URL.revokeObjectURL(thumbUrl);thumbUrl=null;}}
-async function openGal(){await captureTask;stopCamera();const recs=await visitPhotos();urls.forEach(URL.revokeObjectURL);urls=[];$('#grid').replaceChildren();
+function releaseUrls(){releaseThumbs();urls.forEach(URL.revokeObjectURL);urls=[];itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null;}if(thumbUrl){URL.revokeObjectURL(thumbUrl);thumbUrl=null;}}
+/* v19 gallery thumbnails. Showing every full photo at once ran out of memory on large visits
+   (about 500 photos), so each cell gets a small copy made when it nears the screen, one photo at
+   a time. Copies are kept on the phone and checked against the photo's time and size. Cells far
+   off screen let go of their picture. The full photo still opens on the photo screen. */
+const THUMB_PX=360,thumbCache=new Map(),cellRecs=new Map();
+let thumbObserver=null,thumbQueue=[],thumbWorking=false;
+function thumbStoreReady(){try{return !!db&&db.objectStoreNames.contains('thumbs');}catch{return false;}}
+function dropThumbs(ids){if(!thumbStoreReady()||!ids?.length)return;for(const id of ids){const u=thumbCache.get(id);if(u){URL.revokeObjectURL(u);thumbCache.delete(id);}}
+ transaction(['thumbs'],'readwrite',tx=>{for(const id of ids)tx.objectStore('thumbs').delete(id);}).catch(()=>{});}
+function releaseThumbs(){thumbObserver?.disconnect?.();thumbObserver=null;thumbQueue=[];cellRecs.clear();thumbCache.forEach(u=>URL.revokeObjectURL(u));thumbCache.clear();}
+async function decodeSmall(blob){
+ if(typeof createImageBitmap==='function'){let bmp=null;
+  try{bmp=await createImageBitmap(blob,{resizeWidth:THUMB_PX*2,resizeQuality:'medium'});}catch{try{bmp=await createImageBitmap(blob);}catch{}}
+  if(bmp)return {src:bmp,w:bmp.width,h:bmp.height,done:()=>bmp.close?.()};}
+ if(typeof Image!=='function')return null;
+ const url=URL.createObjectURL(blob);
+ try{const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=url;});return {src:im,w:im.naturalWidth,h:im.naturalHeight,done:()=>URL.revokeObjectURL(url)};}
+ catch{URL.revokeObjectURL(url);return null;}
+}
+async function makeThumb(blob){
+ const d=await decodeSmall(blob);if(!d||!d.w||!d.h)return null;
+ try{const k=Math.min(1,THUMB_PX/Math.max(d.w,d.h)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(d.w*k));c.height=Math.max(1,Math.round(d.h*k));
+  c.getContext('2d').drawImage(d.src,0,0,c.width,c.height);const out=await new Promise(ok=>c.toBlob(ok,'image/jpeg',.8));c.width=c.height=0;return out?.size?out:null;}
+ catch{return null;}finally{d.done();}
+}
+async function thumbFor(r){
+ if(thumbCache.has(r.id))return thumbCache.get(r.id);
+ let small=null;
+ if(thumbStoreReady()){try{const t=await read('thumbs',r.id);if(t&&t.ts===r.ts&&t.size===r.blob.size&&t.blob?.size)small=t.blob;}catch{}}
+ if(!small){small=await makeThumb(r.blob);if(small&&thumbStoreReady())put('thumbs',{id:r.id,ts:r.ts,size:r.blob.size,blob:small}).catch(()=>{});}
+ // Without a way to shrink the photo (very old browsers), fall back to the full photo.
+ const u=URL.createObjectURL(small||r.blob);thumbCache.set(r.id,u);return u;
+}
+function showThumb(cell){const r=cellRecs.get(cell);if(!r)return;if(thumbCache.has(r.id)){cell.style.backgroundImage='url('+thumbCache.get(r.id)+')';return;}
+ if(!thumbQueue.includes(cell))thumbQueue.push(cell);runThumbs();}
+async function runThumbs(){if(thumbWorking)return;thumbWorking=true;
+ try{while(thumbQueue.length){const cell=thumbQueue.shift(),r=cellRecs.get(cell);if(!r||cell.dataset?.near==='0')continue;
+  const u=await thumbFor(r);if(cellRecs.get(cell)===r&&cell.dataset?.near!=='0')cell.style.backgroundImage='url('+u+')';}}
+ finally{thumbWorking=false;}}
+function watchCell(cell,r){cellRecs.set(cell,r);
+ if(!thumbObserver&&typeof IntersectionObserver==='function')thumbObserver=new IntersectionObserver(entries=>{for(const e of entries){
+  if(e.isIntersecting){if(e.target.dataset)e.target.dataset.near='1';showThumb(e.target);}
+  else{if(e.target.dataset)e.target.dataset.near='0';e.target.style.backgroundImage='';}}},{root:$('#gal'),rootMargin:'900px 0px'});
+ if(thumbObserver)thumbObserver.observe(cell);else showThumb(cell);}
+async function openGal(){await captureTask;stopCamera();const recs=await visitPhotos(),wasOpen=$('#gal').classList.contains('open'),keepScroll=$('#gal').scrollTop||0;
+ thumbObserver?.disconnect?.();thumbObserver=null;thumbQueue=[];cellRecs.clear();$('#grid').replaceChildren();
  const inReport=recs.filter(r=>!r.omit).length,left=recs.length-inReport;
  $('#galEmpty').style.display=recs.length?'none':'block';$('#galEmpty').textContent='No photos yet. You can still record items and export a report.';
  $('#galTitle').textContent=svr(visit.num)+' · '+recs.length+' photos · '+inReport+' in report';$('#galClose').textContent='Back';
@@ -385,9 +469,9 @@ async function openGal(){await captureTask;stopCamera();const recs=await visitPh
  const plan=photoPlan(visit,recs),groups=galleryGroups(visit,recs),headings=groups.some(g=>g.key);
  for(const g of groups){if(headings){const h=document.createElement('h4');h.className='ghead';h.textContent=g.label+' · '+g.photos.length;$('#grid').append(h);}
  g.photos.forEach(r=>{if(!r.blob?.size){const row=document.createElement('p');row.className='auto';row.textContent='Photo '+(recs.indexOf(r)+1)+' · Removed from phone. Open the saved cloud photo or restore the project recovery file.';$('#grid').append(row);return;}
-  const num=r.omit?null:plan.numbers.get(r.id);const u=URL.createObjectURL(r.blob);urls.push(u);
+  const num=r.omit?null:plan.numbers.get(r.id);
   const wrap=document.createElement('div');wrap.className='cellwrap'+(r.omit?' out':'');
-  const c=document.createElement('button');c.className='cell'+(r.tag==='Safety'?' safety':'');c.style.backgroundImage='url('+u+')';c.setAttribute('aria-label',num?'Observation '+num:'Photo not in report');
+  const c=document.createElement('button');c.className='cell'+(r.tag==='Safety'?' safety':'');watchCell(c,r);c.setAttribute('aria-label',num?'Observation '+num:'Photo not in report');
   const n=document.createElement('span');n.className='n';n.textContent=num?String(num).padStart(3,'0'):'Not in report';
   const t=document.createElement('span');t.className='t';t.textContent=fmt(r.ts)+(r.note?' · Note':'');c.append(n,t);c.onclick=safe(()=>openDet(r.id,num));
   const inc=document.createElement('button');inc.className='inc'+(r.omit?'':' on');inc.setAttribute('aria-pressed',String(!r.omit));inc.setAttribute('aria-label',r.omit?'Add to report':'Leave out of report');inc.textContent=r.omit?'':'✓';inc.disabled=isReadonly();
@@ -395,7 +479,7 @@ async function openGal(){await captureTask;stopCamera();const recs=await visitPh
   const loc=document.createElement('button');loc.className='cloc';loc.textContent=photoLocation(r)||'General';loc.disabled=isReadonly();loc.setAttribute('aria-label','Location: '+(photoLocation(r)||'General')+'. Change for this photo');
   loc.onclick=e=>{e.stopPropagation();openLocation(r.id,photoLocation(r));};
   wrap.append(c,inc,loc);$('#grid').append(wrap);});}
- $('#gal').classList.add('open');}
+ $('#gal').classList.add('open');if(wasOpen)$('#gal').scrollTop=keepScroll;}
 async function setOmit(id,omit){editable();const m=(await oneM(id))||{id};await put('meta',{...m,id,omit:omit?'1':''});readyBlob=null;}
 on('#galAll',async()=>{editable();for(const r of await visitPhotos())if(r.omit)await setOmit(r.id,false);await openGal();});
 on('#thumb',e=>{e.stopPropagation();return openGal();});
@@ -409,7 +493,7 @@ async function openDet(id,n){if(n===undefined)n=photoPlan(visit,await visitPhoto
  for(const [id,key] of [['detNote','note'],['detSheet','sheet'],['detOwner','owner']]){$('#'+id).value=cur[key]||'';$('#'+id).disabled=isReadonly();}paintDetLocation();
  const item=visit.items.find(i=>i.id===cur.itemId||i.photoId===cur.id);cur.itemId=item?.id||'';if(item?.photoId===cur.id){cur.note=item.note;cur.owner=item.owner;cur.due=item.due;$('#detNote').value=cur.note;$('#detOwner').value=cur.owner;}cur.original=JSON.stringify([cur.note,cur.sheet,cur.owner,cur.tag,cur.due,cur.itemId,!cur.omit]);
  $('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';$('#detDue').disabled=isReadonly();
- drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=isReadonly();$('#detDel').hidden=isReadonly();$('#det').classList.add('open');$('#captureNext').hidden=!captureComment||isReadonly();$('#captureSkip').hidden=!captureComment;$('#detClose').textContent=captureComment?'Skip':'Back';$('#detSave').textContent=captureComment?'Save & Next':'Save';setCard('#detDel',captureComment?'Retake photo':'Delete photo',captureComment?'camera':'trash',captureComment?'Discards this photo and returns to the camera':'Removes it from this visit');setCard('#captureNext','Save and take next photo','check');setCard('#captureSkip','Skip comment','arrow','The photo is already saved');$('#captureHint').textContent=captureComment?'Your photo is saved. A comment is optional and can be added later.':'';$('#photoDetails').open=!!(cur.tag||cur.sheet||cur.owner||cur.due);}
+ drawTags(cur.tag);drawDue(cur.due);$('#detSave').hidden=isReadonly();$('#detDel').hidden=isReadonly();$('#det').classList.add('open');$('#captureNext').hidden=!captureComment||isReadonly();$('#captureSkip').hidden=!captureComment;$('#detClose').textContent=captureComment?'Skip':'Back';$('#detSave').textContent=captureComment?'Save & Next':'Save';setCard('#detDel',captureComment?'Retake photo':'Delete photo',captureComment?'camera':'trash',captureComment?'Discards this photo and returns to the camera':'Removes it from this visit');setCard('#captureNext','Save and take next photo','check');setCard('#captureSkip','Skip comment','arrow','The photo is already saved');const sizeLine=captureComment?takeSizeNote():'';$('#captureHint').textContent=captureComment?(sizeLine||'Your photo is saved. A comment is optional and can be added later.'):'';$('#captureHint').classList.toggle('warnline',!!sizeLine);$('#photoDetails').open=!!(cur.tag||cur.sheet||cur.owner||cur.due);}
 function drawTags(active){$('#tagRow').replaceChildren();TAGS.forEach(t=>{const b=document.createElement('button');b.className='tag'+(t===active?' on':'')+(t==='Safety'?' safety':'');b.textContent=t;b.disabled=isReadonly();b.onclick=()=>{cur.tag=cur.tag===t?'':t;drawTags(cur.tag);};$('#tagRow').append(b);});$('#actionBits').style.display=(['Issue','Action','Safety'].includes(active))?'block':'none';}
 function drawDue(active){$('#dueRow').replaceChildren();['Next visit','One week','Two weeks','Clear'].forEach(d=>{const b=document.createElement('button');b.className='tag'+((d==='Clear'?!active:dueValue(d,visit.date)===active)?' on':'');b.textContent=d;b.disabled=isReadonly();b.onclick=()=>{cur.due=d==='Clear'?'':dueValue(d,visit.date);$('#detDue').value=/^\d{4}-\d{2}-\d{2}$/.test(cur.due)?cur.due:'';drawDue(cur.due);};$('#dueRow').append(b);});}
 $('#detDue').onchange=()=>{cur.due=$('#detDue').value;drawDue(cur.due);};
@@ -430,7 +514,7 @@ async function openItems(fromStart){await captureTask;itemsFromStart=fromStart;a
 async function paintItems(){itemUrls.forEach(URL.revokeObjectURL);itemUrls=[];$('#itemsTitle').textContent='Open Items · '+visitLabel(visit);$('#itemsList').replaceChildren();$('#addItem').hidden=isReadonly();$('#itemsContinue').textContent=itemsFromStart?'Continue to Photos':'Back to Visit';
  if(!visit.items.length){const p=document.createElement('p');p.textContent='No tracked items yet. Tag a photo Issue, Action or Safety, or add an item below.';$('#itemsList').append(p);}
  for(const item of [...visit.items].sort((a,b)=>Number(b.tag==='Safety')-Number(a.tag==='Safety'))){const card=document.createElement('article');card.className='itemcard'+(item.tag==='Safety'?' safety':'');const title=document.createElement('h3');title.textContent=(item.tag==='Safety'?'SAFETY · ':'')+item.ref+' · '+item.status;card.append(title);
- if(item.photoId){const pr=await oneP(item.photoId);if(pr?.blob){const im=document.createElement('img');im.alt='Original photo for item '+item.ref;im.src=URL.createObjectURL(pr.blob);itemUrls.push(im.src);card.append(im);}}
+ if(item.photoId){const pr=await oneP(item.photoId);if(pr?.blob){const im=document.createElement('img');im.alt='Original photo for item '+item.ref;im.loading='lazy';im.decoding='async';im.src=URL.createObjectURL(pr.blob);itemUrls.push(im.src);card.append(im);}}
  for(const txt of [item.note||'Photo item with no description',item.area,[item.owner?'Owner: '+item.owner:'',item.due?'Due: '+item.due:''].filter(Boolean).join(' · '),'First noted '+svr(item.firstVisitNum)+' · '+new Date(item.firstNoted).toLocaleDateString(),item.update?'This visit: '+item.update:''])if(txt){const p=document.createElement('p');p.textContent=txt;card.append(p);}
  const chips=document.createElement('div');chips.className='chips';if(!isReadonly()){for(const status of ['Still open','Closed']){const b=document.createElement('button');b.className='tag'+(item.status===status?' on':'');b.textContent=status;b.onclick=safe(async()=>{const next=clone(visit),it=next.items.find(i=>i.id===item.id);it.status=status;it.closedAt=status==='Closed'?Date.now():null;await persistVisit(next);item.status=status;title.textContent=(item.tag==='Safety'?'SAFETY · ':'')+item.ref+' · '+status;for(const button of chips.children)button.classList.toggle('on',button.textContent===status);});chips.append(b);}const edit=document.createElement('button');edit.className='btn';edit.textContent='Details / update';edit.onclick=()=>openItemEditor(item.id);chips.append(edit);}card.append(chips);$('#itemsList').append(card);}
 }
@@ -468,12 +552,11 @@ const plural=(n,word)=>n+' '+word+(n===1?'':'s');
 function fmtMB(bytes){return bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':Math.max(1,Math.round(bytes/1024))+' KB';}
 function ago(ts){const d=Math.floor((Date.now()-ts)/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago';}
 function lastBackup(){return stored('lastBackup',null);}
+/* v19: the backup is a ZIP (backup.json plus each photo as its own file). The v18 file held every
+   photo as text inside one JSON file, which crashed the app on large visits. */
 async function makeBackupFile(onStep){
  const snapshot=await transaction(STORES,'readonly',tx=>{const qs=STORES.map(n=>tx.objectStore(n).getAll());return ()=>Object.fromEntries(STORES.map((n,i)=>[n,qs[i].result]));});
- let i=0;for(const p of snapshot.photos){if(p.blob?.size){p.data=await blobData(p.blob);delete p.archived;}else if(p.archived===true){p.data=null;}else throw new Error('A saved photo is unreadable.');delete p.blob;onStep?.(++i,snapshot.photos.length);}
- const counts={projects:snapshot.projects.length,visits:snapshot.visits.length,photos:snapshot.photos.filter(p=>p.data).length};
- const file=new File([JSON.stringify({format:'rdg-sitevisit-backup',version:2,createdAt:new Date().toISOString(),counts,data:snapshot})],'RDG-Site-Visit-Backup_'+dateInput(Date.now())+'.json',{type:'application/json'});
- return {file,counts};
+ return dataPackage('rdg-sitevisit-backup',snapshot,'RDG-Site-Visit-Backup_'+dateInput(Date.now())+'.zip',onStep);
 }
 function paintBackupRow(){const last=lastBackup(),hasWork=allVisits.length>0,stale=!last||Date.now()-last.at>14*864e5;
  setCard('#backupBtn','Backup and restore','backup',last?'Last backup '+ago(last.at):hasWork?'No backup yet. Tap to protect your visits.':'Keep your visits safe off this phone');
@@ -492,7 +575,7 @@ async function openBackup(){
 async function prepareBackup(){
  $('#backup').disabled=true;$('#backupReady').hidden=true;$('#backupNote').textContent='';
  setCard('#backup','Preparing backup','backup','Reading projects and photos…');
- try{backupReady=await makeBackupFile((i,n)=>{if(i%10===0||i===n)setCard('#backup','Preparing backup','backup','Photo '+i+' of '+n);});
+ try{backupReady=await makeBackupFile((i,n)=>{if(i%10===0||i===n)setCard('#backup','Preparing backup','backup','Packing file '+i+' of '+n);});
   $('#backupFile').textContent=backupReady.file.name+' · '+fmtMB(backupReady.file.size);
   const shareable=canShareFile(backupReady.file);
   setCard('#backupSave',shareable?'Save backup file':'Download backup file','share',shareable?'Choose Save to Files, then OneDrive':'Saves to Downloads. Then move it to Google Drive or OneDrive.');
@@ -517,12 +600,12 @@ function askChoice(title,text,options){return new Promise(resolve=>{
  $('#busyWrap').classList.remove('show');
  $('#choiceTitle').textContent=title;$('#choiceText').textContent=text;$('#choiceButtons').replaceChildren();
  const close=v=>{$('#choiceSheet').classList.remove('open');$('#choiceScrim').classList.remove('open');resolve(v);};
- for(const o of options){const b=document.createElement('button');b.className='tile'+(o.primary?' cta':'');setCard(b,o.label,o.icon||(o.value==null?'close':'arrow'),o.sub||'');b.onclick=()=>close(o.value);$('#choiceButtons').append(b);}
+ for(const o of options){const b=document.createElement('button');b.className='tile'+(o.primary?' cta':'')+(o.del?' del':'');setCard(b,o.label,o.icon||(o.value==null?'close':'arrow'),o.sub||'');b.onclick=()=>close(o.value);$('#choiceButtons').append(b);}
  $('#choiceScrim').onclick=()=>close(null);
  $('#choiceSheet').classList.add('open');$('#choiceScrim').classList.add('open');
 });}
 function validateBackup(raw){
- if(raw?.format!=='rdg-sitevisit-backup'||![1,2].includes(raw.version)||!raw.data)throw new Error('This is not a supported Site Visit backup.');
+ if(raw?.format!=='rdg-sitevisit-backup'||![1,2,3].includes(raw.version)||!raw.data)throw new Error('This is not a supported Site Visit backup.');
  const d=raw.data,maps={};
  for(const n of STORES){if(!Array.isArray(d[n]))throw new Error('Backup is missing '+n+'.');maps[n]=new Map();for(const r of d[n]){if(!r||!Number.isSafeInteger(r.id)||r.id<1||maps[n].has(r.id))throw new Error('Invalid or duplicate record in '+n+'.');maps[n].set(r.id,r);}}
  const str=(v)=>typeof v==='string';const validDate=v=>Number.isFinite(v)&&v>0;
@@ -541,7 +624,10 @@ function validateBackup(raw){
  for(const id of [it.photoId,...it.followupPhotoIds].filter(id=>id!=null)){const photo=maps.photos.get(id);if(!photo||maps.visits.get(photo.visitId)?.projectId!==v.projectId)throw new Error('An item references a missing photo or another project.');}
  }}}
  for(const m of d.meta){if(!maps.photos.has(m.id))throw new Error('Photo notes reference a missing photo.');for(const k of [...NOTE_KEYS,'area','excluded'])if(m[k]!=null&&!str(m[k]))throw new Error('Invalid photo notes.');}
- for(const p of d.photos){if(raw.version===2&&p.archived===true&&p.data===null){if(!maps.visits.has(p.visitId)||!validDate(p.ts))throw new Error('Invalid archived photo.');delete p.blob;continue;}if(!maps.visits.has(p.visitId)||!validDate(p.ts)||!str(p.data)||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(p.data))throw new Error('Invalid photo in backup.');const [header,encoded]=p.data.split(',');let bytes;try{bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));}catch{throw new Error('A photo is damaged in the backup.');}if(!bytes.length)throw new Error('Backup contains an empty photo.');p.blob=new Blob([bytes],{type:header.slice(5,header.indexOf(';'))});delete p.data;delete p.archived;}
+ for(const p of d.photos){
+ // v19 ZIP backups: the photo was read from its own file in the ZIP before validation.
+ if(raw.version===3&&!(p.archived===true&&p.data===null)){if(!maps.visits.has(p.visitId)||!validDate(p.ts)||!p.blob||typeof p.blob.slice!=='function'||!p.blob.size||!/^image\/(jpeg|png|webp)$/.test(p.blob.type))throw new Error('Invalid photo in backup.');delete p.path;delete p.mime;delete p.data;delete p.archived;continue;}
+ if(raw.version>=2&&p.archived===true&&p.data===null){if(!maps.visits.has(p.visitId)||!validDate(p.ts))throw new Error('Invalid archived photo.');delete p.blob;continue;}if(!maps.visits.has(p.visitId)||!validDate(p.ts)||!str(p.data)||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(p.data))throw new Error('Invalid photo in backup.');const [header,encoded]=p.data.split(',');let bytes;try{bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));}catch{throw new Error('A photo is damaged in the backup.');}if(!bytes.length)throw new Error('Backup contains an empty photo.');p.blob=new Blob([bytes],{type:header.slice(5,header.indexOf(';'))});delete p.data;delete p.archived;}
  return d;
 }
 let dataEpoch=0;
@@ -563,11 +649,12 @@ async function setupUpdates(){if(!('serviceWorker'in navigator))return;
 wireCloudUI();
 wireWorkflow();
 function paintStatic(){
+ setCard('#receiveBtn','Add shared project','link','From a coworker\'s link or message');
  setCard('#profileBtn','Your information','user',userProfile().name?userProfile().name+' · on every report you prepare':'Name, phone and email for your reports');
  setCard('#manageStorage','Phone storage','storage','Free space by removing old visit photos');
  setCard('#checkUpdate','Check for app update','refresh','Build '+BUILD);
 }
-async function init(){try{db=await openDB();await migrate();paintStatic();await loadState();if(!userProfile().name)openProfile(true);setupUpdates().catch(()=>{});
+async function init(){try{db=await openDB();await migrate();paintStatic();await loadState();paintOnline();if(!userProfile().name)openProfile(true);openShareLink().catch(showError);setupUpdates().catch(()=>{});
  // Ask the browser to keep this app's data even when the phone is short of space.
  try{navigator.storage?.persist?.().catch(()=>{});}catch{}}catch(e){$('#sState').textContent='Could not open saved projects. '+e.message;showError(e);}}
 // One editor tab prevents competing visit numbers and conflicting photo or item edits.

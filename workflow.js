@@ -30,7 +30,7 @@ function visitLabel(v){return 'SVR-'+String(v.num).padStart(3,'0')+(v.revision?'
 function userProfile(){const p={name:'',phone:'',email:'',...stored('userProfile',{})};return {...p,company:p.company||'Redline Design Group',officePhone:p.officePhone||'704-377-2990'};}
 async function fillVisitContact(){if(!visit||isReadonly())return;const p=userProfile(),next=clone(visit);let changed=false;for(const [key,source] of [['preparedBy','name'],['preparedCompany','company'],['preparedPhone','phone'],['preparedEmail','email'],['preparedOfficePhone','officePhone']])if(!next[key]&&p[source]){next[key]=p[source];changed=true;}if(changed)await persistVisit(next);}
 function openProfile(first=false){profileFirstUse=first;const p=userProfile();for(const key of ['Name','Company','Phone','Email','OfficePhone'])$('#profile'+key).value=p[key==='OfficePhone'?'officePhone':key.toLowerCase()];$('#profileClose').textContent=first?'Later':'Back';$('#profileStatus').textContent='';$('#profileIntro').textContent=first?'Welcome. Enter your details once and they fill in Prepared By on every report. They stay on this phone only.':'These fill in Prepared By on every new report. Each report keeps its own copy, so changes here do not alter past reports.';$('#profileSheet').classList.add('open');}
-function openProjectForm(edit){projectEditing=edit;const p=edit?currentProject():null;$('#projectName').value=p?.name||'';$('#projectNumber').value=p?.number||'';$('#projectFormTitle').textContent=edit?'Edit Project Details':'New Project';for(const k of ['Address','Client','Contact','Phone','Email'])$('#project'+k).value=p?.[k.toLowerCase()]||'';$('#projectHelp').textContent=edit?'Changes apply to future visits. Existing visits retain their recorded project information.':'Create a project to keep its visits and open items together.';$('#projectSheet').classList.add('open');}
+function openProjectForm(edit){projectEditing=edit;const p=edit?currentProject():null;paintProjectShare(p);$('#projectName').value=p?.name||'';$('#projectNumber').value=p?.number||'';$('#projectFormTitle').textContent=edit?'Edit Project Details':'New Project';for(const k of ['Address','Client','Contact','Phone','Email'])$('#project'+k).value=p?.[k.toLowerCase()]||'';$('#projectHelp').textContent=edit?'Changes apply to future visits. Existing visits retain their recorded project information.':'Create a project to keep its visits and open items together.';$('#projectSheet').classList.add('open');}
 function showSetup(){stopCamera();$('#setupProject').textContent=visit.project+(visit.projNum?' · '+visit.projNum:'');$('#setupTitle').textContent=visitLabel(visit)+' · '+new Date(visit.date).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
  const open=visit.items.filter(i=>i.status!=='Closed').length;
  setCard('#setupContinue','Start taking photos','camera','Comments are optional after each photo');
@@ -56,13 +56,13 @@ async function openReview(){
  setCard('#reviewItems','Open items',unreviewed?'flag':'items',open?open+' open'+(unreviewed?' · '+unreviewed+' not reviewed yet':''):'None open');$('#reviewItems').classList.toggle('attn',unreviewed>0&&!isReadonly());
  setCard('#reviewNotes','General notes','edit',visit.generalNotes?'Entered · '+visit.generalNotes.slice(0,60)+(visit.generalNotes.length>60?'…':''):'Optional summary for page one');
  setCard('#reviewLayout','Report layout','layout',layoutName(visit.reportLayout));$('#reviewLayout').hidden=isReadonly();
- setCard('#reviewShare',isReadonly()?'Send the report':'Build and send the report','share',isReadonly()?'Email it, send a link, or save the package':'Issue it, then email it or send a link');
+ setCard('#reviewShare',isReadonly()?'Send the report':'Build and send the report','share',isReadonly()?'Email it, send a link, or save the package':inReport>=SIZE_WARN_PHOTOS?inReport+' photos: may be too large to email. Send as a link is ready.':'Issue it, then email it or send a link');
  setCard('#reviewCamera','Take more photos','camera');setCard('#reviewEdit','Edit visit','edit','Make corrections or a revision');setCard('#reviewHistory','Report history','history','Every issued copy, exactly as sent');setCard('#reviewHome','Back to Start','home');
  $('#reviewEdit').hidden=!isReadonly();$('#reviewCamera').hidden=isReadonly();
  $('#stepSend').querySelector?.('b')&&($('#stepSend').querySelector('b').textContent=isReadonly()?'Send':'Issue and send');
  $('#reviewHistory').hidden=!(visit.history?.length);
  $('#reviewWord').textContent='';
- preparePhotoSave(photos);$('#savePhotosNote').textContent='';
+ preparePhotoSave(photos);paintPhotoZip();$('#savePhotosNote').textContent='';
  $('#reviewSheet').classList.add('open');
 }
 /* v17 Save photos. Files are prepared when Review & Share opens so the tap can call
@@ -74,6 +74,7 @@ const SHARE_BYTES=45*1048576;
 function preparePhotoSave(photos){
  const all=photoExportSet(visit,photos.filter(p=>p.blob?.size)).map(e=>({id:e.rec.id,file:new File([e.rec.blob],e.name,{type:e.rec.blob.type||'image/jpeg'})}));
  photoSave={visitId:visit.id,total:all.length,ids:all.map(e=>e.id),all,queue:[],next:0,busy:false};
+ if(photoZip&&(photoZip.visitId!==visit.id||photoZip.ids.join()!==photoSave.ids.join()))photoZip=null;
  queuePhotos();paintPhotoSave();
 }
 /* Unsaved photos only; when every photo is already saved, all of them again. */
@@ -90,9 +91,11 @@ function paintPhotoSave(){
  $('#reviewSavePhotos').disabled=!total;
  $('#stepPhotos').classList?.toggle('done',!!total&&!left);$('#reviewSavePhotos').classList.toggle('saved',!!total&&!left);
 }
+/* v19 tries 50 photos per share first (iPhone handles it); a phone that refuses drops to a
+   smaller batch next time. Chrome on Android stops at 10. */
 function nextPhotoBatch(){
- const rest=photoSave.queue.slice(photoSave.next),max=stored('photoBatchMax',20);
- for(const size of [20,10,5,1].filter(n=>n<=max)){
+ const rest=photoSave.queue.slice(photoSave.next),max=stored('photoBatchMax',50);
+ for(const size of [50,20,10,5,1].filter(n=>n<=max)){
   const batch=[];let bytes=0;
   for(const e of rest){if(batch.length>=size||(size<=10&&batch.length&&bytes+e.file.size>SHARE_BYTES))break;batch.push(e);bytes+=e.file.size;}
   try{if(navigator.canShare?.({files:batch.map(e=>e.file)}))return batch;}catch{}
@@ -118,7 +121,7 @@ function savePhotosTap(note,onDone){
   navigator.share({files:batch.map(e=>e.file)}).then(async()=>{
    photoSave.next+=batch.length;await markPhotosSaved(batch.map(e=>e.id));
    const done=photoSave.next>=photoSave.queue.length;
-   note.textContent=done?'All '+photoSave.queue.length+' photos handed to the app you chose. Check they arrived there; this app cannot confirm it.':photoSave.next+' of '+photoSave.queue.length+' photos handed off. Tap Save Next Batch for the rest.';
+   note.textContent=done?'All '+photoSave.queue.length+' photos handed to the app you chose. Check they arrived there; this app cannot confirm it.':photoSave.next+' of '+photoSave.queue.length+' photos handed off. Tap Save Next Batch for the next '+Math.min(batch.length,photoSave.queue.length-photoSave.next)+'.';
    finish();if(done)onDone?.();
   }).catch(e=>{
    if(e?.name==='AbortError')note.textContent='Canceled. Nothing was lost. Tap again when ready.';
@@ -261,6 +264,130 @@ function layoutName(key){return LAYOUT_NAMES[key]||LAYOUT_NAMES.compact;}
 function openLayout(){const current=visit.reportLayout in LAYOUT_NAMES?visit.reportLayout:'compact';
  for(const key of Object.keys(LAYOUT_NAMES))$('#layout_'+key).classList.toggle('picked',key===current);$('#layoutSheet').classList.add('open');}
 async function pickLayout(key){editable();const next=clone(visit);next.reportLayout=key;await persistVisit(next);remember('reportLayout',key);$('#layoutSheet').classList.remove('open');await openReview();}
+/* ---------- v19: every photo in one ZIP ----------
+   For Google Drive or OneDrive in one step. Built first, then saved from a separate tap so the
+   share menu still opens on iPhone. The camera roll cannot take a ZIP; Save Photos does that. */
+let photoZip=null;
+function paintPhotoZip(){
+ const total=photoSave?.total||0,z=photoZip&&photoZip.visitId===visit?.id?photoZip:null;
+ setCard('#reviewPhotoZip',z?'Photo ZIP ready':'All photos in one ZIP file','folder',!total?'No photos yet':z?'Tap Save ZIP below':total+(total===1?' photo':' photos')+' in one file, for Google Drive or OneDrive');
+ $('#reviewPhotoZip').disabled=!total||!!z;$('#photoZipReady').hidden=!z;
+ if(z){$('#photoZipName').textContent=z.file.name+' · '+fmtMB(z.file.size);const ok=canShareFile(z.file);
+  setCard('#photoZipSave',ok?'Save ZIP':'Download ZIP',ok?'share':'download',ok?'Choose Save to Files, then Google Drive or OneDrive':'Saves to Downloads. Upload it from your cloud app.');}
+}
+async function preparePhotoZip(){
+ if(!photoSave?.total||photoSave.visitId!==visit?.id)return;const v=visit,list=photoSave.all,ids=[...photoSave.ids];
+ busyShow('Packing photos');
+ try{const folder=visitStem(v)+'_Photos';
+  const file=await makeVisitZip([{path:folder+'/',blob:new Blob()},...list.map(e=>({path:folder+'/'+e.file.name,blob:e.file}))],folder+'.zip',(i,n)=>{$('#busyText').textContent='Packing photo '+Math.max(0,i-1)+' of '+(n-1);$('#busyBar').style.width=Math.round(i/n*100)+'%';});
+  photoZip={visitId:v.id,file,ids};}
+ finally{$('#busyWrap').classList.remove('show');}
+ paintPhotoZip();
+}
+function savePhotoZipTap(){
+ const z=photoZip,note=$('#savePhotosNote');if(!z||z.visitId!==visit?.id)return;
+ const saved=how=>{note.textContent=how;markPhotosSaved(z.ids).then(()=>paintPhotoSave()).catch(showError);};
+ if(!canShareFile(z.file)){download(z.file,z.file.name);saved('Download started. The ZIP is in Downloads; upload it from your Google Drive or OneDrive app.');return;}
+ $('#photoZipSave').disabled=true;
+ try{navigator.share({files:[z.file]}).then(()=>saved('ZIP handed to the app you chose. Check it arrived there; this app cannot confirm it.'))
+  .catch(e=>{note.textContent=e?.name==='AbortError'?'Canceled. Nothing was lost. Tap Save ZIP when ready.':'Could not share the ZIP ('+(e?.message||'unknown')+'). Try again, or use Save Photos.';})
+  .finally(()=>{$('#photoZipSave').disabled=false;});}
+ catch(e){$('#photoZipSave').disabled=false;note.textContent='Could not open the share menu: '+e.message;}
+}
+
+/* ---------- v19: report size heads-up during the walk ---------- */
+const SIZE_WARN_PHOTOS=70;let sizeNote='';
+function checkSizeWarning(vid){if(count<SIZE_WARN_PHOTOS)return;const key='sizeWarned:'+vid;if(stored(key,false))return;remember(key,true);
+ sizeNote='Heads up: '+count+' photos. The Word report may be too large to email. When you send it, Send as a link is ready for that. Keep going; nothing else changes.';}
+function takeSizeNote(){const n=sizeNote;sizeNote='';return n;}
+
+/* ---------- v19: no signal ----------
+   The app runs from the phone and saves everything on it, so it keeps working with no signal.
+   The note says so, and that keyboard dictation may need a connection. */
+function paintOnline(){const off=typeof navigator!=='undefined'&&navigator.onLine===false;for(const id of ['#offlineStart','#offlineCam','#offlineDet'])$(id).hidden=!off;}
+if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){
+ window.addEventListener('online',()=>paintOnline());window.addEventListener('offline',()=>paintOnline());
+ // A link opened while the app is already running. Before the database is open, startup handles it.
+ window.addEventListener('hashchange',()=>{if(/share=/.test(location.hash||'')&&typeof db!=='undefined'&&db)safe(openShareLink)();});
+}
+
+/* ---------- v19: swipe left on a past report to delete it ----------
+   Step 1 is the swipe, which shows Delete. Step 2 is a sheet that offers a backup first and
+   names exactly what will be removed. Tapping the row still opens the report. */
+const SWIPE_W=96;let openSwipe=null;
+function swipeRow(tile,onOpen,onDelete){
+ const row=document.createElement('div');row.className='swiperow';
+ const del=document.createElement('button');del.type='button';del.className='swipedel';del.textContent='Delete';del.setAttribute('aria-label','Delete this report');
+ const close=()=>{row.classList.remove('open');tile.style.transform='';if(openSwipe===row)openSwipe=null;};
+ const open=()=>{if(openSwipe&&openSwipe!==row)openSwipe.closeSwipe();row.classList.add('open');tile.style.transform='';openSwipe=row;};
+ row.closeSwipe=close;
+ let x0=null,y0=0,dx=0,drag=false,moved=false;
+ row.addEventListener('touchstart',e=>{const t=e.touches[0];x0=t.clientX;y0=t.clientY;dx=0;drag=false;moved=false;},{passive:true});
+ row.addEventListener('touchmove',e=>{if(x0==null)return;const t=e.touches[0];dx=t.clientX-x0;const dy=t.clientY-y0;
+  if(!drag&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.4){drag=true;row.classList.add('dragging');}
+  if(drag){moved=true;const base=row.classList.contains('open')?-SWIPE_W:0;tile.style.transform='translateX('+Math.max(-SWIPE_W*1.3,Math.min(0,base+dx))+'px)';}},{passive:true});
+ const end=()=>{if(x0==null)return;x0=null;row.classList.remove('dragging');if(!drag)return;const was=row.classList.contains('open');
+  if((!was&&dx<-SWIPE_W/2)||(was&&dx<SWIPE_W/2))open();else close();};
+ row.addEventListener('touchend',end,{passive:true});row.addEventListener('touchcancel',end,{passive:true});
+ row.onclick=e=>{if(moved){moved=false;return;}if(e?.target===del)return;if(row.classList.contains('open')){close();return;}return onOpen();};
+ del.onclick=e=>{e?.stopPropagation?.();close();return onDelete();};
+ row.append(del,tile);return row;
+}
+async function askDeleteVisit(v){
+ const all=await allV(),deps=visitDependents(all,v.id);
+ if(deps.length){await askChoice('Cannot delete '+visitLabel(v),deps.map(visitLabel).join(', ')+' carries items first noted in '+visitLabel(v)+'. Delete '+(deps.length===1?'that report':'those reports')+' first, or keep both.',[{label:'OK',value:null,icon:'check'}]);return;}
+ const n=await countFor(v.id),latest=Math.max(...all.filter(x=>x.projectId===v.projectId).map(x=>x.num))===v.num,last=lastBackup();
+ const status=v.editing?'working edits':!v.closed?'draft':v.issuedAt?'issued':'complete';
+ const when=new Date(v.date).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});
+ const pick=await askChoice('Delete '+visitLabel(v)+'?',
+  'This removes '+visitLabel(v)+' ('+status+', '+when+'), its '+plural(n,'photo')+', comments and report history from this phone. It cannot be undone. Reports you already sent or saved elsewhere are not affected.'+(latest?' The next report for this project will be numbered '+visitLabel({num:v.num})+' again.':'')+' '+(last?'Last backup '+ago(last.at)+'.':'No backup yet.'),
+  [{label:'Back up first',value:'backup',primary:true,icon:'backup',sub:'Save everything off this phone, then come back'},
+   {label:'Delete '+visitLabel(v)+' permanently',value:'delete',icon:'trash',del:true,sub:'Cannot be undone'},
+   {label:'Cancel',value:null}]);
+ if(pick==='backup'){await openBackup();return;}
+ if(pick!=='delete')return;
+ busyShow('Deleting '+visitLabel(v));
+ try{await deleteVisit(v.id);}finally{$('#busyWrap').classList.remove('show');}
+ await loadState();
+}
+
+/* ---------- v19: share a project with a coworker ---------- */
+function paintProjectShare(p){
+ $('#projectShareBox').hidden=!p;$('#shareNote').textContent='';if(!p)return;
+ const n=(p.locations||[]).length,rooms=n+(n===1?' room':' rooms');
+ setCard('#shareProject','Share project setup','share','Name, number, address, client and '+rooms);
+ setCard('#shareRooms','Share room names only','share',n?rooms+', to add to their own project':'No rooms saved yet. Add them on a visit.');$('#shareRooms').disabled=!n;
+}
+function showShareText(text,note){note.textContent='Copy this and send it to your coworker:\n\n'+text;}
+function copyShareText(text,note){try{navigator.clipboard.writeText(text).then(()=>{note.textContent='Copied. Paste it into a text or email to your coworker.';}).catch(()=>showShareText(text,note));}catch{showShareText(text,note);}}
+/* Called straight from the tap so the share menu opens on iPhone. */
+function shareProjectTap(kind){
+ const p=currentProject(),note=$('#shareNote');if(!p)return;
+ const payload=sharePayload(p,kind),text=shareMessage(payload),title=(kind==='project'?'Site Visit project: ':'Site Visit rooms: ')+p.name;
+ if(typeof navigator.share==='function'){try{navigator.share({title,text}).then(()=>{note.textContent='Sent. Your coworker taps the link, or pastes the message into Add shared project.';})
+  .catch(e=>{if(e?.name==='AbortError')note.textContent='Canceled. Nothing was sent.';else copyShareText(text,note);});return;}catch{}}
+ copyShareText(text,note);
+}
+function openReceive(prefill=''){$('#receiveInput').value=prefill;$('#receiveNote').textContent='';
+ setCard('#receivePaste','Paste from clipboard','notes');setCard('#receiveAdd','Add to this phone','plus','Project setup or room names');$('#receiveSheet').classList.add('open');}
+async function receiveAdd(){const share=parseShare($('#receiveInput').value),done=await importShared(share);if(!done)return;
+ selectedProject=done.projectId;$('#receiveSheet').classList.remove('open');await loadState();alert(done.text);}
+/* A share link opened in the browser. On iPhone the home screen app keeps its own data apart
+   from Safari, so the user can copy the link into the app instead. */
+async function openShareLink(){
+ const hash=(typeof location!=='undefined'&&location.hash)||'';if(!/share=/.test(hash))return;
+ try{history.replaceState(null,'',location.pathname+location.search);}catch{}
+ let share;try{share=parseShare(hash);}catch(e){alert(e.message);return;}
+ const ua=navigator.userAgent||'',ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ const standalone=navigator.standalone===true||(typeof matchMedia==='function'&&matchMedia('(display-mode: standalone)').matches);
+ if(ios&&!standalone){
+  const pick=await askChoice('Shared: '+share.project.name,'On iPhone, the Site Visit app on your home screen keeps its projects separate from Safari. To add this to the app, copy the link, open Site Visit from your home screen and tap Add shared project.',
+   [{label:'Copy link for the app',value:'copy',primary:true,icon:'link',sub:'Then open Site Visit from your home screen'},{label:'Add it here in Safari',value:'here',icon:'plus',sub:'Only if you use Site Visit in Safari'},{label:'Cancel',value:null}]);
+  if(pick==='copy'){const link=shareBase()+'#'+hash.replace(/^#/,'');try{await navigator.clipboard.writeText(link);alert('Copied. Open Site Visit from your home screen, tap Add shared project, then Paste.');}catch{openReceive(link);}return;}
+  if(pick!=='here')return;
+ }
+ const done=await importShared(share);if(!done)return;selectedProject=done.projectId;await loadState();alert(done.text);
+}
 function wireWorkflow(){
  on('#reviewLayout',openLayout);on('#layoutBack',()=>$('#layoutSheet').classList.remove('open'));
  on('#layout_compact',()=>pickLayout('compact'));on('#layout_large',()=>pickLayout('large'));
@@ -291,6 +418,10 @@ function wireWorkflow(){
  $('#doneEmail').onclick=()=>{if(!visit)return;const subject=visit.project+' · '+visitLabel(visit)+' Site Visit Report';
   location.href='mailto:?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent('Please find the attached site visit report, '+readyName+'.');};
  on('#cloudDone',async()=>{$('#cloudSheet').classList.remove('open');await openReview();});
+ on('#reviewPhotoZip',preparePhotoZip);$('#photoZipSave').onclick=savePhotoZipTap;
+ $('#shareProject').onclick=()=>shareProjectTap('project');$('#shareRooms').onclick=()=>shareProjectTap('rooms');
+ on('#receiveBtn',()=>openReceive());on('#receiveBack',()=>$('#receiveSheet').classList.remove('open'));on('#receiveAdd',receiveAdd);
+ $('#receivePaste').onclick=()=>{try{navigator.clipboard?.readText?.().then(t=>{$('#receiveInput').value=(t||'').trim();$('#receiveNote').textContent='';}).catch(()=>{$('#receiveNote').textContent='Press and hold in the box, then tap Paste.';});}catch{$('#receiveNote').textContent='Press and hold in the box, then tap Paste.';}};
  on('#sendLink',openLink);on('#linkBack',()=>$('#linkSheet').classList.remove('open'));
  $('#linkSave').onclick=linkSaveTap;$('#linkEmail').onclick=linkEmailTap;
  $('#linkPaste').onclick=()=>{try{navigator.clipboard?.readText?.().then(t=>{$('#linkInput').value=(t||'').trim();$('#linkNote').textContent='';}).catch(()=>{$('#linkNote').textContent='Press and hold in the box, then tap Paste.';});}catch{$('#linkNote').textContent='Press and hold in the box, then tap Paste.';}};

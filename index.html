@@ -291,6 +291,7 @@
 </div>
 
 <button class="stall" id="stall">Camera stalled. Tap to restart.</button>
+<div class="offlinecam" id="offlineCam" role="status" hidden>No signal. Photos still save on this phone.</div>
 <div id="cameraSaved" role="status" aria-live="polite"></div>
 <div class="zoomrow" id="zoomRow"></div>
 
@@ -308,9 +309,11 @@
     <button class="btn right" id="locationDone">Done</button>
   </div>
   <p class="auto" id="locationHelp"></p>
-  <div class="locadd"><input type="text" id="locationInput" placeholder="Add a location, e.g. Room 204" autocomplete="off" enterkeyhint="done"><button class="btn" id="locationAdd">Add</button></div>
+  <div class="locadd"><input type="search" id="locationInput" placeholder="Search or add, e.g. Room 204" autocomplete="off" enterkeyhint="done" aria-label="Search or add a location"><button class="btn" id="locationAdd">Add</button></div>
+  <div class="locsort" role="group" aria-label="Sort saved locations"><span>Sort</span><button type="button" id="locSortNumber">1-2-3</button><button type="button" id="locSortAlpha">A–Z</button><button type="button" id="locSortRecent">Recent</button></div>
   <div class="wheelwrap"><div class="wheel" id="locationWheel" role="listbox" aria-label="Saved locations" tabindex="0"></div></div>
-  <div class="wheelbtns"><button class="ghost" id="locationRemove">Remove</button><button class="primary" id="locationUse">Use this location</button></div>
+  <p class="auto" id="locationEmpty" hidden></p>
+  <div class="wheelbtns"><button class="ghost" id="locationRename">Rename</button><button class="ghost" id="locationRemove">Delete</button><button class="primary" id="locationUse">Use this location</button></div>
 </div>
 
 <!-- visit info -->
@@ -366,6 +369,7 @@
     <div class="meta" id="detMeta"></div>
     <label class="lbl" for="detNote">Comment</label>
     <textarea id="detNote" placeholder="Type, or tap the microphone on your keyboard and talk."></textarea>
+    <p class="offlinenote" id="offlineDet" hidden>No signal. Keyboard dictation may not work until you have signal; typing always works. Your comment saves on this phone either way.</p>
     <div class="tiles detacts"><button class="tile cta" id="captureNext"></button><button class="tile" id="captureSkip"></button></div>
     <div class="locline"><span>Location</span><button class="locchip" id="detLocation">General (no location)</button></div>
     <label class="incrow" for="detInclude"><input type="checkbox" id="detInclude" checked><span>Include in report</span></label>
@@ -448,6 +452,7 @@
       <button class="tile cta" id="startBtn"></button>
     </div>
     <p class="state" id="sState"></p>
+    <p class="offlinenote" id="offlineStart" hidden>No signal. Everything works and saves on this phone. Weather fills in later only if you add it.</p>
 
     <div class="tiles"><button class="tile" id="existingBtn"></button></div>
 
@@ -459,6 +464,7 @@
     <p class="listhead">This phone</p>
     <div class="tiles">
       <button class="tile" id="backupBtn"></button>
+      <button class="tile" id="receiveBtn"></button>
       <button class="tile" id="profileBtn"></button>
       <button class="tile" id="manageStorage"></button>
       <button class="tile" id="checkUpdate"></button>
@@ -475,7 +481,7 @@
   <div class="statuscard" id="backupStatus"><span class="dot" aria-hidden="true"></span><div><b id="backupWhen">No backup yet</b><span id="backupWhat"></span></div></div>
   <p class="listhead">Why back up</p>
   <p class="auto">Your projects, visits and photos live only on this phone, inside this app. Nothing goes to RDG or the cloud on its own. If the app is deleted, Safari or Chrome data is cleared, or you move to a new phone, that work is gone.</p>
-  <p class="auto">A backup is one file that holds everything. Keep it off this phone and you can bring it all back at any time.</p>
+  <p class="auto">A backup is one ZIP file that holds everything. Keep it off this phone and you can bring it all back at any time. Large backups can take a minute to prepare.</p>
   <p class="listhead">Back up</p>
   <div class="tiles"><button class="tile cta" id="backup"></button></div>
   <div class="readycard" id="backupReady" hidden>
@@ -486,7 +492,7 @@
   <div class="note"><b>Where to keep it.</b> OneDrive is best, because you can open it from any office computer. In the share menu choose <b>Save to Files</b>, then <b>OneDrive</b>, and make a folder called <b>RDG Site Visit Backups</b>. iCloud Drive or Google Drive work too. Do not leave it only in Downloads on this phone; it would be lost with the phone.</div>
   <div class="note"><b>When.</b> After each visit you issue, or at least once a week. Always before you delete or reinstall the app.</div>
   <p class="listhead">Restore</p>
-  <p class="auto">Use this after reinstalling the app or on a new phone. Choose your backup file from OneDrive, iCloud Drive, Google Drive or Files. The Recovery file inside a saved visit package works too. Projects already on this phone are kept, and if the file has the same project you choose which copy to keep.</p>
+  <p class="auto">Use this after reinstalling the app or on a new phone. Choose your backup file from OneDrive, iCloud Drive, Google Drive or Files. A saved visit package ZIP, or the Recovery file inside one, works too. Backups from earlier versions (.json) still open. Projects already on this phone are kept, and if the file has the same project you choose which copy to keep.</p>
   <div class="tiles"><button class="tile" id="restore"></button></div>
   <input hidden type="file" id="restoreFile">
   <details class="how"><summary>How to reinstall the app safely</summary><ol class="steps">
@@ -548,11 +554,21 @@
  <div id="cleanupList"></div></div>
 </section>
 
-<section class="sheet workflow" id="existingSheet"><div class="sheethead"><button class="btn" id="existingBack">Back</button><h2>Past Reports</h2></div><div class="pad"><p id="existingProject" class="contextline"></p><p id="existingEmpty" class="empty">No reports for this project yet.</p><div id="pastWrap"><div class="tiles" id="pastList"></div></div></div></section>
+<section class="sheet workflow" id="existingSheet"><div class="sheethead"><button class="btn" id="existingBack">Back</button><h2>Past Reports</h2></div><div class="pad"><p id="existingProject" class="contextline"></p><p id="existingEmpty" class="empty">No reports for this project yet.</p><p class="auto" id="pastHint" hidden>Tap a report to open it. Swipe left on a report to delete it.</p><div id="pastWrap"><div class="tiles" id="pastList"></div></div></div></section>
 
 <section class="sheet workflow" id="profileSheet"><div class="sheethead"><button class="btn" id="profileClose">Back</button><h2>Your Information</h2></div><div class="pad"><p class="auto" id="profileIntro">Enter this once on this phone. It fills in Prepared By on every new report. Each report keeps its own copy.</p><form id="profileForm"><div class="formcard"><label class="lbl" for="profileName">Name</label><input type="text" id="profileName" placeholder="" autocomplete="name"><label class="lbl" for="profileCompany">Company</label><input type="text" id="profileCompany" placeholder=""><div class="pair"><div><label class="lbl" for="profileOfficePhone">Office phone</label><input type="tel" id="profileOfficePhone"></div><div><label class="lbl" for="profilePhone">Direct or mobile</label><input type="tel" id="profilePhone" placeholder="" autocomplete="tel"></div></div><label class="lbl" for="profileEmail">Email</label><input type="email" id="profileEmail" placeholder="" autocomplete="email"></div><button class="primary" type="submit">Save</button></form><p class="auto" id="profileStatus"></p></div></section>
 
-<section class="sheet workflow" id="projectSheet"><div class="sheethead"><button class="btn" id="projectClose">Back</button><h2 id="projectFormTitle">Project Details</h2></div><div class="pad"><p class="auto" id="projectHelp"></p><form id="projectForm"><div class="formcard"><p class="formhead">Project</p><label class="lbl" for="projectName">Project name</label><input type="text" id="projectName" placeholder="Hawthorne Lane Residence"><label class="lbl" for="projectNumber">Project number</label><input type="text" id="projectNumber" placeholder="2419"><label class="lbl" for="projectAddress">Address</label><input type="text" id="projectAddress"></div><div class="formcard"><p class="formhead">Client</p><label class="lbl" for="projectClient">Client or owner</label><input type="text" id="projectClient"><label class="lbl" for="projectContact">Contact name</label><input type="text" id="projectContact"><div class="pair"><div><label class="lbl" for="projectPhone">Phone</label><input type="tel" id="projectPhone"></div><div><label class="lbl" for="projectEmail">Email</label><input type="email" id="projectEmail"></div></div></div><button class="primary" type="submit">Save Project</button></form></div></section>
+<section class="sheet workflow" id="projectSheet"><div class="sheethead"><button class="btn" id="projectClose">Back</button><h2 id="projectFormTitle">Project Details</h2></div><div class="pad"><p class="auto" id="projectHelp"></p><form id="projectForm"><div class="formcard"><p class="formhead">Project</p><label class="lbl" for="projectName">Project name</label><input type="text" id="projectName" placeholder="Hawthorne Lane Residence"><label class="lbl" for="projectNumber">Project number</label><input type="text" id="projectNumber" placeholder="2419"><label class="lbl" for="projectAddress">Address</label><input type="text" id="projectAddress"></div><div class="formcard"><p class="formhead">Client</p><label class="lbl" for="projectClient">Client or owner</label><input type="text" id="projectClient"><label class="lbl" for="projectContact">Contact name</label><input type="text" id="projectContact"><div class="pair"><div><label class="lbl" for="projectPhone">Phone</label><input type="tel" id="projectPhone"></div><div><label class="lbl" for="projectEmail">Email</label><input type="email" id="projectEmail"></div></div></div><button class="primary" type="submit">Save Project</button></form>
+<div id="projectShareBox" hidden><p class="listhead">Share with a coworker</p><p class="auto">Sends a link by text or email. Their app adds the project or the room names. Visits, photos and reports are not shared.</p>
+<div class="tiles"><button class="tile" id="shareProject"></button><button class="tile" id="shareRooms"></button></div><p class="auto selectable" id="shareNote" role="status" aria-live="polite"></p></div></div></section>
+
+<section class="sheet workflow" id="receiveSheet"><div class="sheethead"><button class="btn" id="receiveBack">Back</button><h2>Add Shared Project</h2></div><div class="pad">
+  <p class="auto">A coworker can send a project setup or its room names from Project details, Share. Paste the message or link they sent.</p>
+  <textarea id="receiveInput" placeholder="Paste the message or link here" autocomplete="off"></textarea>
+  <div class="tiles"><button class="tile" id="receivePaste"></button><button class="tile cta" id="receiveAdd"></button></div>
+  <p class="auto" id="receiveNote" role="status" aria-live="polite"></p>
+  <div class="note"><b>What gets added.</b> A project setup adds the project with its details and rooms. Room names are added to a project you pick. Nothing already on this phone is removed or overwritten.</div>
+</div></section>
 
 <section class="sheet workflow" id="setupSheet"><div class="sheethead"><button class="btn" id="setupBack">Back</button><h2>New Visit</h2></div><div class="pad">
   <p class="contextline" id="setupProject"></p><h3 id="setupTitle"></h3>
@@ -568,7 +584,9 @@
   <p class="auto" id="reviewStatus"></p>
   <ol class="flow">
     <li id="stepPhotos"><div class="flowhead"><span class="num">1</span><div><b>Save the original photos</b><span>Full quality copies for the project archive. Choose Save Images, or Save to Files and your OneDrive project folder.</span></div></div>
-      <button class="tile savephotos" id="reviewSavePhotos"><span>Save Photos</span></button><p class="auto" id="savePhotosNote" role="status" aria-live="polite"></p></li>
+      <button class="tile savephotos" id="reviewSavePhotos"><span>Save Photos</span></button><p class="auto" id="savePhotosNote" role="status" aria-live="polite"></p>
+      <div class="tiles"><button class="tile" id="reviewPhotoZip"></button></div>
+      <div class="readycard" id="photoZipReady" hidden><p class="filename" id="photoZipName"></p><div class="tiles"><button class="tile cta" id="photoZipSave"></button></div></div></li>
     <li id="stepCheck"><div class="flowhead"><span class="num">2</span><div><b>Check the report</b><span>Tap any line to review or edit it.</span></div></div>
       <div class="tiles"><button class="tile" id="reviewPhotos"></button><button class="tile" id="reviewInfo"></button><button class="tile" id="reviewItems"></button><button class="tile" id="reviewNotes"></button><button class="tile" id="reviewLayout"></button></div></li>
     <li id="stepSend"><div class="flowhead"><span class="num">3</span><div><b>Issue and send</b><span>Builds the Word report, then email it or send a link.</span></div></div>

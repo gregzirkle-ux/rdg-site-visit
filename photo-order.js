@@ -10,15 +10,34 @@ function photoLocation(r) {
 function locationKey(name) { return String(name || '').trim().toLowerCase(); }
 /* Saved locations on the wheel: names with a number first, by that number (Level 2, Room 9,
    Room 101), then names without a number alphabetically. Equal numbers sort by name. */
-function sortLocations(list) {
+/* v19: mode 'alpha' sorts A to Z; mode 'recent' keeps the saved order, which is most recently
+   added or used first. */
+function sortLocations(list, mode = 'number') {
   const num = s => { const m = String(s).match(/\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; };
   const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  if (mode === 'recent') return [...list];
+  if (mode === 'alpha') return [...list].sort(byName);
   return [...list].sort((a, b) => {
     const x = num(a), y = num(b);
     if (x !== null && y !== null) return x - y || byName(a, b);
     if (x !== null || y !== null) return x !== null ? -1 : 1;
     return byName(a, b);
   });
+}
+/* Search: every word typed must appear in the name, in any order and any case. */
+function filterLocations(list, text) {
+  const words = String(text || '').toLowerCase().split(/\s+/).filter(Boolean);
+  return words.length ? list.filter(name => { const n = String(name).toLowerCase(); return words.every(w => n.includes(w)); }) : [...list];
+}
+/* Rename in a saved list: the new name takes the old one's place; a duplicate is dropped. */
+function renameInList(list, from, to) {
+  const out = [];
+  for (const name of list) {
+    const next = locationKey(name) === locationKey(from) ? to : name;
+    if (!out.some(x => locationKey(x) === locationKey(next))) out.push(next);
+  }
+  if (!out.some(x => locationKey(x) === locationKey(to))) out.unshift(to);
+  return out;
 }
 function reportOrderOf(v) {
   if (v && (v.reportOrder === 'location' || v.reportOrder === 'time')) return v.reportOrder;
