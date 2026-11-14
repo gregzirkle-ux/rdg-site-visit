@@ -1,4 +1,4 @@
-# Android test checklist (Build v18)
+# Android test checklist (Build v19)
 
 Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the phone model and Android version. For each step, write OK or describe what happened, and take a screenshot of anything unexpected.
 
@@ -7,7 +7,7 @@ Use an Android phone with Chrome up to date. Allow about 30 minutes. Note the ph
 1. Open the Site Visit link in Chrome.
 2. Chrome menu (⋮) → **Add to Home screen** or **Install app** → Install.
 3. Open the app from the home screen icon. It should open full screen with no address bar.
-4. On Start, the bottom line should read **Build v18**.
+4. On Start, the bottom line should read **Build v19**.
 
 ## 2. Setup
 

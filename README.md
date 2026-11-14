@@ -1,15 +1,37 @@
-# RDG Site Visit v18
+# RDG Site Visit v19
 
 A card-based field workflow for Redline staff. This is a static app for the existing GitHub/Vercel deployment; no new account or hosting service is required.
 
 ## Update
 
 1. On your phone, open the current app and use Settings & Recovery, Save All App Data, to keep a copy first.
-2. Extract this ZIP and upload the **contents** of the `rdg-site-visit` folder to the root of the existing GitHub repository, replacing the files with the same names. Include the new `tests/v18-checks.cjs`. Do not nest the folder.
+2. Extract this ZIP and upload the **contents** of the `rdg-site-visit` folder to the root of the existing GitHub repository, replacing the files with the same names. Include the new `tests/v19-checks.cjs`. Do not nest the folder.
 3. Let Vercel redeploy at the same address.
-4. On Start, tap Check for app update, install, and reopen. The bottom line reads **Build v18**.
+4. On Start, tap Check for app update, install, and reopen. The bottom line reads **Build v19**.
 
 The database, projects, visit numbers and photos are unchanged by this update.
+
+## v19 at a glance
+
+Changes from Abby's field stress test (486 photos, about 470 comments).
+
+**Photos and comments no longer crash on large visits.** The grid shows small thumbnails (about 6 KB each) made one photo at a time as you scroll, and kept on the phone. Cells far off screen let go of their picture, so only a few dozen are held at once. The full photo still opens on the photo screen. Leaving a photo in or out keeps your place in the list.
+
+**Backup no longer crashes on large files.** A backup is now one ZIP: `backup.json` plus every photo as its own file. The v18 backup turned every photo into text inside one JSON file, which ran out of memory. The Recovery file inside a visit package is a ZIP the same way. Restore accepts the new ZIP backup, a whole visit package ZIP, the Recovery file inside one, and v18 and older `.json` backups.
+
+**Save all photos at once.** Review step 1 adds **All photos in one ZIP file**: one tap builds it, a second tap saves it to Google Drive, OneDrive or Files (Android downloads it). Save Photos still goes to the camera roll and now tries 50 photos per batch, dropping to fewer only if the phone refuses.
+
+**Rooms.** The location panel has a search box (type part of a name; Done or Enter picks the highlighted match, a new name is added), and a Sort toggle: 1-2-3 (by number, as before), A–Z, or Recent (most recently added or used). **Rename** changes the saved name and moves this visit's photos, items and current location to it. **Delete** removes a name from the saved list; photos keep their location.
+
+**Delete past reports.** Swipe left on a report in Past reports to show Delete. Tapping it opens a sheet that offers **Back up first** and names what will be removed; **Delete permanently** is the second step. A report whose items were carried into a later report cannot be deleted until the later one is. Deleting the newest report lets its number be used again, and the sheet says so.
+
+**Share a project with a coworker.** Project details has **Share project setup** (name, number, address, client, contact and rooms) and **Share room names only**. Each sends a link by text or email; there is no server, the setup travels inside the link. The coworker taps the link, or on Start taps **Add shared project** and pastes it. A new project is created, or rooms are added to an existing one; nothing on their phone is removed or overwritten (empty project fields are filled in). On iPhone a link opens in Safari, which keeps separate data from the home screen app, so Safari offers **Copy link for the app** first.
+
+**No signal.** The app already ran from the phone and saved everything on it. It now says so when there is no signal (Start, camera, and the comment screen), and notes that keyboard dictation may need signal while typing always works. On newer iPhones, on-device dictation (Settings, General, Keyboard) works without signal.
+
+**Report size heads-up.** On the 70th photo of a visit the comment screen says the Word report may be too large to email, once per visit. Review shows the same note on Build and send. Change `SIZE_WARN_PHOTOS` in `workflow.js` to move it.
+
+**Not in this build.** AI general notes (needs a small server and an API key; planned later).
 
 ## v18 at a glance
 
@@ -81,11 +103,11 @@ Existing substantive report limitations wording is retained, with its editorial 
 
 ## Storage and recovery
 
-Backup and restore is on Start. See v18 at a glance above.
+Backup and restore is on Start. See v19 and v18 at a glance above.
 
 Completed visits become eligible for local photo cleanup after 30 days (Phone storage). Nothing is removed automatically. Working edits are excluded. Photos supporting open items in the latest visit are protected. Exact issued Word copies and metadata remain.
 
-The Recovery JSON inside each visit package holds that project's records, available photos and issued history. Restore it from Backup and restore, Restore from a backup file.
+The Recovery file inside each visit package (a ZIP from v19, JSON before) holds that project's records, available photos and issued history. Restore it from Backup and restore, Restore from a backup file.
 
 ## Verification
 
@@ -101,11 +123,14 @@ node tests/layout-checks.cjs
 node tests/location-checks.cjs
 node tests/v17-flow-checks.cjs
 node tests/v18-checks.cjs
+node tests/v19-checks.cjs
 ```
 
 Local checks cover recovery compatibility, immutable snapshots, corrections, R1/R2 sequencing, discarded edits, later-visit independence, restored snapshot references, archived Word re-export, direct share/cancel behavior, and the assembled photo-to-issue event flow using a simulated camera/database. Actual DOCX and ZIP files were generated and independently checked for content and integrity.
 
-Browser preview access was blocked by automatic approval review. Visual layout and physical-device camera, offline behavior, native email, and Files/cloud handoff have not been visually/device-tested. Before field use, check one small visit on your normal iPhone/email setup, including sharing and saving the ZIP.
+v19 was also run in Chromium on an emulated phone with real IndexedDB: a v18 database upgraded to v19, a 300 photo gallery scrolled end to end, a backup ZIP restored onto an empty phone, the photo ZIP, swipe to delete, a share link opened on a second phone, and loading with no network. Real iPhone share sheets, Safari and home screen behavior still need a device test.
+
+Earlier: browser preview access was blocked by automatic approval review. Visual layout and physical-device camera, offline behavior, native email, and Files/cloud handoff have not been visually/device-tested. Before field use, check one small visit on your normal iPhone/email setup, including sharing and saving the ZIP.
 
 ## v15.2 navigation update
 
